@@ -17,6 +17,7 @@ import {
 } from "./atoms"
 import { CloseButton, DropEvent } from "./close-button"
 import { SelectionToolbarCustomActionButtons } from "./custom-action-button"
+import { SaveLearningButton } from "./save-learning-button"
 import { SpeakButton } from "./speak-button"
 import { TranslateButton } from "./translate-button"
 
@@ -428,9 +429,11 @@ export function SelectionToolbar() {
   )
 
   const { features } = selectionToolbar
+  const isLearningFeatureEnabled = true
   const hasAnyEnabledFeature
     = features.translate.enabled
       || (!isFirefox && features.speak.enabled)
+      || isLearningFeatureEnabled
       || selectionToolbar.customActions.some(a => a.enabled !== false)
 
   return (
@@ -456,6 +459,7 @@ export function SelectionToolbar() {
             <div className="flex items-center overflow-x-auto overflow-y-hidden rounded-sm max-w-105 no-scrollbar">
               {features.translate.enabled && <TranslateButton />}
               {!isFirefox && features.speak.enabled && <SpeakButton />}
+              <SaveLearningButton />
               <SelectionToolbarCustomActionButtons />
             </div>
             <CloseButton />
