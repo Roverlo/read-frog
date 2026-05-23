@@ -1,5 +1,5 @@
-import { Entity } from "dexie"
 import type { VocabQuestion } from "@/types/learning"
+import { Entity } from "dexie"
 
 export default class VocabTestSession extends Entity {
   id!: string

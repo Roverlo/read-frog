@@ -1,5 +1,5 @@
-import { Entity } from "dexie"
 import type { ReviewQuestion } from "@/types/learning"
+import { Entity } from "dexie"
 
 export default class ReviewSession extends Entity {
   id!: string
@@ -15,5 +15,6 @@ export default class ReviewSession extends Entity {
     selectedAnswer: string
     correct: boolean
   }>
+
   passed!: boolean
 }

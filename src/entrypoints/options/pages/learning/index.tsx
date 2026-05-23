@@ -1,5 +1,5 @@
-import type { GithubLearningSyncConfig, LearningItem, ReviewQuestion, VocabQuestion } from "@/types/learning"
 import type { LLMProviderConfig, ProvidersConfig } from "@/types/config/provider"
+import type { GithubLearningSyncConfig, LearningItem, ReviewQuestion, VocabQuestion } from "@/types/learning"
 import { Icon } from "@iconify/react"
 import { useAtomValue } from "jotai"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -116,8 +116,15 @@ function LearningItemRow({ item, onChanged }: { item: LearningItem, onChanged: (
           <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{item.context}</p>
         )}
         <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-          <span>通过 {item.consecutivePasses}/2</span>
-          <span>复习 {item.reviewCount}</span>
+          <span>
+            通过
+            {item.consecutivePasses}
+            /2
+          </span>
+          <span>
+            复习
+            {item.reviewCount}
+          </span>
           <span>{item.updatedAt.toLocaleString()}</span>
         </div>
       </div>
@@ -221,57 +228,72 @@ function VocabTestPanel({ providerConfig, onChanged }: { providerConfig: LLMProv
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-4">
-        {questions.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-            点击开始后生成 12 道分级词汇题。
-          </div>
-        ) : (
-          <>
-            <Progress value={(Object.keys(answers).length / questions.length) * 100}>
-              <ProgressLabel>完成进度</ProgressLabel>
-              <ProgressValue>{Object.keys(answers).length}/{questions.length}</ProgressValue>
-            </Progress>
-            <div className="grid gap-3">
-              {questions.map((question, index) => (
-                <div key={question.id} className="rounded-lg border p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <span className="text-xs text-muted-foreground">Q{index + 1}</span>
-                      <div className="text-lg font-semibold">{question.word}</div>
+        {questions.length === 0
+          ? (
+              <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                点击开始后生成 12 道分级词汇题。
+              </div>
+            )
+          : (
+              <>
+                <Progress value={(Object.keys(answers).length / questions.length) * 100}>
+                  <ProgressLabel>完成进度</ProgressLabel>
+                  <ProgressValue>{() => `${Object.keys(answers).length}/${questions.length}`}</ProgressValue>
+                </Progress>
+                <div className="grid gap-3">
+                  {questions.map((question, index) => (
+                    <div key={question.id} className="rounded-lg border p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <span className="text-xs text-muted-foreground">
+                            Q
+                            {index + 1}
+                          </span>
+                          <div className="text-lg font-semibold">{question.word}</div>
+                        </div>
+                        <Badge variant="outline">{question.level}</Badge>
+                      </div>
+                      <RadioGroup
+                        className="mt-3 grid gap-2 md:grid-cols-2"
+                        value={answers[question.id] ?? ""}
+                        onValueChange={(value: unknown) => setAnswers(prev => ({ ...prev, [question.id]: String(value) }))}
+                      >
+                        {question.choices.map(choice => (
+                          <label key={choice} className="flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm hover:bg-muted/50">
+                            <RadioGroupItem value={choice} />
+                            <span>{choice}</span>
+                          </label>
+                        ))}
+                      </RadioGroup>
                     </div>
-                    <Badge variant="outline">{question.level}</Badge>
-                  </div>
-                  <RadioGroup
-                    className="mt-3 grid gap-2 md:grid-cols-2"
-                    value={answers[question.id] ?? ""}
-                    onValueChange={(value: unknown) => setAnswers(prev => ({ ...prev, [question.id]: String(value) }))}
+                  ))}
+                </div>
+                <div className="flex items-center justify-between">
+                  {result
+                    ? (
+                        <div className="text-sm">
+                          答对
+                          {" "}
+                          {result.correct}
+                          /
+                          {result.total}
+                          ，估算词汇量约
+                          {" "}
+                          {result.estimated.toLocaleString()}
+                          。
+                        </div>
+                      )
+                    : <span />}
+                  <Button
+                    type="button"
+                    disabled={Object.keys(answers).length < questions.length || isSubmitting}
+                    onClick={submit}
                   >
-                    {question.choices.map(choice => (
-                      <label key={choice} className="flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm hover:bg-muted/50">
-                        <RadioGroupItem value={choice} />
-                        <span>{choice}</span>
-                      </label>
-                    ))}
-                  </RadioGroup>
+                    {isSubmitting ? "保存中..." : "提交测试"}
+                  </Button>
                 </div>
-              ))}
-            </div>
-            <div className="flex items-center justify-between">
-              {result ? (
-                <div className="text-sm">
-                  答对 {result.correct}/{result.total}，估算词汇量约 {result.estimated.toLocaleString()}。
-                </div>
-              ) : <span />}
-              <Button
-                type="button"
-                disabled={Object.keys(answers).length < questions.length || isSubmitting}
-                onClick={submit}
-              >
-                {isSubmitting ? "保存中..." : "提交测试"}
-              </Button>
-            </div>
-          </>
-        )}
+              </>
+            )}
       </CardContent>
     </Card>
   )
@@ -444,7 +466,12 @@ function ReviewPanel({ items, providerConfig, onChanged }: { items: LearningItem
             <div className="grid gap-3">
               {questions.map((question, index) => (
                 <div key={question.id} className="rounded-lg border p-4">
-                  <div className="font-medium">Q{index + 1}. {question.prompt}</div>
+                  <div className="font-medium">
+                    Q
+                    {index + 1}
+                    .
+                    {question.prompt}
+                  </div>
                   <RadioGroup
                     className="mt-3 grid gap-2 md:grid-cols-2"
                     value={answers[question.id] ?? ""}
@@ -480,13 +507,15 @@ function LibraryPanel({ items, status, onChanged }: { items: LearningItem[], sta
   const filtered = items.filter(item => item.status === status)
   return (
     <div className="grid gap-3">
-      {filtered.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-          暂无内容。
-        </div>
-      ) : filtered.map(item => (
-        <LearningItemRow key={item.id} item={item} onChanged={onChanged} />
-      ))}
+      {filtered.length === 0
+        ? (
+            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+              暂无内容。
+            </div>
+          )
+        : filtered.map(item => (
+            <LearningItemRow key={item.id} item={item} onChanged={onChanged} />
+          ))}
     </div>
   )
 }
@@ -502,15 +531,6 @@ function GithubSyncPanel({ syncConfig, onChanged }: { syncConfig: GithubLearning
   const [userCode, setUserCode] = useState("")
   const [verificationUri, setVerificationUri] = useState("")
   const [isBusy, setIsBusy] = useState(false)
-
-  useEffect(() => {
-    setOwner(syncConfig?.owner ?? DEFAULT_SYNC.owner)
-    setRepo(syncConfig?.repo ?? DEFAULT_SYNC.repo)
-    setBranch(syncConfig?.branch ?? DEFAULT_SYNC.branch)
-    setPath(syncConfig?.path ?? DEFAULT_SYNC.path)
-    setToken(syncConfig?.token ?? "")
-    setClientId(syncConfig?.clientId ?? "")
-  }, [syncConfig])
 
   const saveConfig = async (nextToken = token) => {
     await saveGithubLearningSyncConfig({
@@ -653,7 +673,13 @@ function GithubSyncPanel({ syncConfig, onChanged }: { syncConfig: GithubLearning
           </div>
           {userCode && (
             <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-              在浏览器打开 <a className="underline" href={verificationUri} target="_blank" rel="noopener noreferrer">{verificationUri}</a>，输入设备码 <span className="font-mono font-semibold">{userCode}</span>。
+              在浏览器打开
+              {" "}
+              <a className="underline" href={verificationUri} target="_blank" rel="noopener noreferrer">{verificationUri}</a>
+              ，输入设备码
+              {" "}
+              <span className="font-mono font-semibold">{userCode}</span>
+              。
             </div>
           )}
           <label className="grid gap-1 text-sm">
@@ -663,7 +689,8 @@ function GithubSyncPanel({ syncConfig, onChanged }: { syncConfig: GithubLearning
         </div>
         <div className="flex flex-wrap justify-between gap-2">
           <div className="text-xs text-muted-foreground">
-            最后同步：{syncConfig?.lastSyncAt ? syncConfig.lastSyncAt.toLocaleString() : "尚未同步"}
+            最后同步：
+            {syncConfig?.lastSyncAt ? syncConfig.lastSyncAt.toLocaleString() : "尚未同步"}
           </div>
           <div className="flex gap-2">
             <Button type="button" variant="outline" disabled={isBusy || !token} onClick={createRepo}>
@@ -738,7 +765,11 @@ export function LearningPage() {
           {isLoading ? <div className="text-sm text-muted-foreground">加载中...</div> : <LibraryPanel items={items} status="mastered" onChanged={refresh} />}
         </TabsContent>
         <TabsContent value="sync">
-          <GithubSyncPanel syncConfig={data?.syncConfig} onChanged={refresh} />
+          <GithubSyncPanel
+            key={data?.syncConfig?.updatedAt.getTime() ?? "empty-sync-config"}
+            syncConfig={data?.syncConfig}
+            onChanged={refresh}
+          />
         </TabsContent>
       </Tabs>
     </PageLayout>

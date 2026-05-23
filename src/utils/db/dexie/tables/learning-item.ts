@@ -1,5 +1,5 @@
-import { Entity } from "dexie"
 import type { LearningExplanation, LearningItemKind, LearningItemStatus } from "@/types/learning"
+import { Entity } from "dexie"
 
 export default class LearningItem extends Entity {
   id!: string

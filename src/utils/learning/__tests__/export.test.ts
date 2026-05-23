@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { LearningItem } from "@/types/learning"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 type MockLearningItem = Partial<LearningItem> & {
   id: string

@@ -1,6 +1,7 @@
+import type { VocabListEntry } from "./vocab-list"
 import type { VocabQuestion } from "@/types/learning"
 import { getRandomUUID } from "@/utils/crypto-polyfill"
-import { VOCAB_LIST, VocabListEntry } from "./vocab-list"
+import { VOCAB_LIST } from "./vocab-list"
 
 function shuffle<T>(items: T[]) {
   const result = [...items]

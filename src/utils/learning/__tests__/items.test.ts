@@ -26,7 +26,7 @@ const putMock = vi.fn(async (item: MockLearningRow) => {
   }
 })
 const getMock = vi.fn(async (id: string) => mockRows.find(row => row.id === id))
-const firstMock = vi.fn(async () => mockRows[0])
+const firstMock = vi.fn(async (): Promise<MockLearningRow | undefined> => mockRows[0])
 const equalsMock = vi.fn(() => ({ first: firstMock }))
 const whereMock = vi.fn(() => ({ equals: equalsMock }))
 

@@ -35,8 +35,8 @@ async function githubRequest<T>(
   const response = await fetch(`https://api.github.com${path}`, {
     ...init,
     headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${config.token}`,
+      "Accept": "application/vnd.github+json",
+      "Authorization": `Bearer ${config.token}`,
       "X-GitHub-Api-Version": "2022-11-28",
       ...init?.headers,
     },
@@ -74,7 +74,7 @@ export async function syncLearningDataToGithub() {
     throw new Error("GitHub sync is not configured")
   }
 
-  type ContentResponse = {
+  interface ContentResponse {
     content: string
     sha: string
   }
@@ -151,7 +151,7 @@ export async function requestGithubDeviceCode(clientId: string) {
   const response = await fetch("https://github.com/login/device/code", {
     method: "POST",
     headers: {
-      Accept: "application/json",
+      "Accept": "application/json",
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body,
@@ -182,7 +182,7 @@ export async function pollGithubDeviceToken(input: {
   const response = await fetch("https://github.com/login/oauth/access_token", {
     method: "POST",
     headers: {
-      Accept: "application/json",
+      "Accept": "application/json",
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body,

@@ -1,6 +1,6 @@
 import type { LearningExplanation, LearningItem, LearningItemKind, LearningItemStatus } from "@/types/learning"
-import { db } from "@/utils/db/dexie/db"
 import { getRandomUUID } from "@/utils/crypto-polyfill"
+import { db } from "@/utils/db/dexie/db"
 
 export function normalizeLearningText(text: string) {
   return text.trim().replace(/\s+/g, " ").toLowerCase()
