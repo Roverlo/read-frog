@@ -128,9 +128,9 @@ export async function exportLearningData(): Promise<LearningDataExport> {
 }
 
 export async function mergeLearningData(remote: LearningDataExport) {
-  const remoteItems = remote.items.map(deserializeLearningItem)
-  const remoteVocabSessions = remote.vocabTestSessions.map(deserializeVocabTestSession)
-  const remoteReviewSessions = remote.reviewSessions.map(deserializeReviewSession)
+  const remoteItems = (remote.items ?? []).map(deserializeLearningItem)
+  const remoteVocabSessions = (remote.vocabTestSessions ?? remote.vocabTests ?? []).map(deserializeVocabTestSession)
+  const remoteReviewSessions = (remote.reviewSessions ?? []).map(deserializeReviewSession)
   const remoteReviewLogs = (remote.reviewLogs ?? []).map(deserializeLearningReviewLog)
   const remoteSettings = remote.settings ? deserializeLearningSettings(remote.settings) : undefined
 

@@ -142,8 +142,9 @@ export interface LearningDataExport {
   schemaVersion: 1 | 2
   exportedAt: string
   items: Array<SerializedLearningItem>
-  vocabTestSessions: Array<SerializedVocabTestSession>
-  reviewSessions: Array<SerializedReviewSession>
+  vocabTestSessions?: Array<SerializedVocabTestSession>
+  vocabTests?: Array<SerializedVocabTestSession>
+  reviewSessions?: Array<SerializedReviewSession>
   reviewLogs?: Array<SerializedLearningReviewLog>
   settings?: SerializedLearningSettings
 }

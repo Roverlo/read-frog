@@ -87,4 +87,16 @@ describe("learning export merge", () => {
 
     expect(mockRemotePuts[0].text).toBe("local")
   })
+
+  it("treats missing optional arrays as empty during merge", async () => {
+    const { mergeLearningData } = await import("../export")
+
+    await expect(mergeLearningData({
+      schemaVersion: 2,
+      exportedAt: new Date().toISOString(),
+      items: [],
+    })).resolves.toBeUndefined()
+
+    expect(mockRemotePuts).toHaveLength(0)
+  })
 })
