@@ -1,6 +1,7 @@
-import type { LearningExplanation, LearningItem, LearningItemKind, LearningItemStatus } from "@/types/learning"
+import type { LearningExplanation, LearningItem, LearningItemKind, LearningItemStatus, LearningReviewRating } from "@/types/learning"
 import { getRandomUUID } from "@/utils/crypto-polyfill"
 import { db } from "@/utils/db/dexie/db"
+import { applySrsReview, createInitialSrsCard, getLearningMaturity, isSrsMastered } from "./srs"
 
 export function normalizeLearningText(text: string) {
   return text.trim().replace(/\s+/g, " ").toLowerCase()
@@ -30,6 +31,8 @@ export async function upsertLearningItem(input: {
   sourceTitle?: string
   context?: string
   explanation?: LearningExplanation
+  parentId?: string
+  tags?: string[]
 }) {
   const normalizedText = normalizeLearningText(input.text)
   if (!normalizedText) {
@@ -43,22 +46,30 @@ export async function upsertLearningItem(input: {
     .first()
 
   if (existing) {
+    const srsCard = existing.srsCard ?? createInitialSrsCard(existing.createdAt)
+    const status = input.status ?? existing.status
     const next: LearningItem = {
       ...existing,
       kind: input.kind ?? existing.kind,
-      status: input.status ?? existing.status,
+      status,
       source: input.source,
       sourceUrl: input.sourceUrl ?? existing.sourceUrl,
       sourceTitle: input.sourceTitle ?? existing.sourceTitle,
       context: input.context ?? existing.context,
       explanation: input.explanation ?? existing.explanation,
+      parentId: input.parentId ?? existing.parentId,
+      tags: [...new Set([...(existing.tags ?? []), ...(input.tags ?? [])])],
+      srsCard,
+      dueAt: existing.dueAt ?? existing.nextReviewAt ?? new Date(),
+      maturity: getLearningMaturity(srsCard),
       updatedAt: now,
-      masteredAt: input.status === "mastered" ? (existing.masteredAt ?? now) : existing.masteredAt,
+      masteredAt: status === "mastered" ? (existing.masteredAt ?? now) : existing.masteredAt,
     }
     await db.learningItems.put(next)
     return next
   }
 
+  const srsCard = createInitialSrsCard(now)
   const item: LearningItem = {
     id: getRandomUUID(),
     kind: input.kind ?? inferLearningItemKind(input.text),
@@ -70,6 +81,13 @@ export async function upsertLearningItem(input: {
     sourceTitle: input.sourceTitle,
     context: input.context,
     explanation: input.explanation,
+    parentId: input.parentId,
+    tags: input.tags ?? [],
+    srsCard,
+    dueAt: input.status === "mastered" ? undefined : now,
+    lastReviewAt: undefined,
+    lastRating: undefined,
+    maturity: input.status === "mastered" ? "mature" : "new",
     consecutivePasses: input.status === "mastered" ? 2 : 0,
     reviewCount: 0,
     correctCount: 0,
@@ -84,14 +102,33 @@ export async function upsertLearningItem(input: {
 }
 
 export async function markLearningItemReviewResult(itemId: string, passed: boolean) {
+  return await markLearningItemReviewRating(itemId, passed ? "good" : "again")
+}
+
+export async function markLearningItemReviewRating(
+  itemId: string,
+  rating: LearningReviewRating,
+  options: {
+    sessionId?: string
+    reviewedAt?: Date
+    desiredRetention?: number
+  } = {},
+) {
   const item = await db.learningItems.get(itemId)
   if (!item) {
     return null
   }
 
-  const now = new Date()
+  const now = options.reviewedAt ?? new Date()
+  const passed = rating === "good" || rating === "easy"
+  const { before, after, dueAt, maturity } = applySrsReview({
+    item,
+    rating,
+    reviewedAt: now,
+    desiredRetention: options.desiredRetention,
+  })
   const consecutivePasses = passed ? item.consecutivePasses + 1 : 0
-  const status: LearningItemStatus = consecutivePasses >= 2 ? "mastered" : item.status === "archived" ? "archived" : "learning"
+  const status: LearningItemStatus = isSrsMastered(after, consecutivePasses) ? "mastered" : item.status === "archived" ? "archived" : "learning"
   const next: LearningItem = {
     ...item,
     status,
@@ -99,12 +136,31 @@ export async function markLearningItemReviewResult(itemId: string, passed: boole
     reviewCount: item.reviewCount + 1,
     correctCount: item.correctCount + (passed ? 1 : 0),
     incorrectCount: item.incorrectCount + (passed ? 0 : 1),
+    srsCard: after,
+    dueAt: status === "mastered" ? undefined : dueAt,
+    lastReviewAt: now,
+    lastRating: rating,
+    maturity,
     updatedAt: now,
     masteredAt: status === "mastered" ? (item.masteredAt ?? now) : item.masteredAt,
-    nextReviewAt: status === "mastered" ? undefined : new Date(now.getTime() + 24 * 60 * 60 * 1000),
+    nextReviewAt: status === "mastered" ? undefined : dueAt,
   }
 
-  await db.learningItems.put(next)
+  await db.transaction("rw", db.learningItems, db.learningReviewLogs, async () => {
+    await db.learningItems.put(next)
+    await db.learningReviewLogs.add({
+      id: getRandomUUID(),
+      itemId,
+      sessionId: options.sessionId,
+      rating,
+      correct: passed,
+      reviewedAt: now,
+      srsBefore: before,
+      srsAfter: after,
+      createdAt: now,
+      updatedAt: now,
+    })
+  })
   return next
 }
 

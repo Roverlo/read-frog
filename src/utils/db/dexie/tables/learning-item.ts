@@ -1,4 +1,4 @@
-import type { LearningExplanation, LearningItemKind, LearningItemStatus } from "@/types/learning"
+import type { LearningExplanation, LearningItemKind, LearningItemStatus, LearningMaturity, LearningReviewRating, LearningSrsCard } from "@/types/learning"
 import { Entity } from "dexie"
 
 export default class LearningItem extends Entity {
@@ -12,6 +12,13 @@ export default class LearningItem extends Entity {
   sourceTitle?: string
   context?: string
   explanation?: LearningExplanation
+  parentId?: string
+  tags!: string[]
+  srsCard?: LearningSrsCard
+  dueAt?: Date
+  lastReviewAt?: Date
+  lastRating?: LearningReviewRating
+  maturity!: LearningMaturity
   consecutivePasses!: number
   reviewCount!: number
   correctCount!: number

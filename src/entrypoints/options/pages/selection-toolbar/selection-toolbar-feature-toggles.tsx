@@ -1,5 +1,5 @@
 import { RiTranslate } from "@remixicon/react"
-import { IconVolume } from "@tabler/icons-react"
+import { IconBookmark, IconVolume } from "@tabler/icons-react"
 import { useAtom } from "jotai"
 import { i18n } from "#imports"
 import { Switch } from "@/components/ui/base-ui/switch"
@@ -15,7 +15,7 @@ export function SelectionToolbarFeatureToggles() {
   const { features } = selectionToolbar
 
   const setFeatureEnabled = (
-    key: "translate" | "speak",
+    key: "translate" | "speak" | "learning",
     enabled: boolean,
   ) => {
     void setSelectionToolbar({
@@ -56,6 +56,16 @@ export function SelectionToolbarFeatureToggles() {
             />
           </div>
         )}
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-2 text-sm">
+            <IconBookmark className="size-4 text-muted-foreground" />
+            加入待学习
+          </span>
+          <Switch
+            checked={features.learning?.enabled ?? true}
+            onCheckedChange={checked => setFeatureEnabled("learning", checked)}
+          />
+        </div>
       </div>
     </ConfigCard>
   )

@@ -10,6 +10,10 @@ vi.mock("@/utils/host/translate/ui/style-injector", () => ({
   ensurePresetStyles: ensurePresetStylesMock,
 }))
 
+vi.mock("@/utils/host/translate/translate-variants", () => ({
+  translateTextForPage: vi.fn(),
+}))
+
 describe("spinner", () => {
   beforeEach(() => {
     document.head.innerHTML = ""

@@ -7,6 +7,8 @@ import ArticleSummaryCache from "./tables/article-summary-cache"
 import BatchRequestRecord from "./tables/batch-request-record"
 import GithubLearningSyncConfig from "./tables/github-learning-sync-config"
 import LearningItem from "./tables/learning-item"
+import LearningReviewLog from "./tables/learning-review-log"
+import LearningSettings from "./tables/learning-settings"
 import ReviewSession from "./tables/review-session"
 import TranslationCache from "./tables/translation-cache"
 import VocabTestSession from "./tables/vocab-test-session"
@@ -49,6 +51,16 @@ export default class AppDB extends Dexie {
 
   githubLearningSyncConfig!: EntityTable<
     GithubLearningSyncConfig,
+    "id"
+  >
+
+  learningReviewLogs!: EntityTable<
+    LearningReviewLog,
+    "id"
+  >
+
+  learningSettings!: EntityTable<
+    LearningSettings,
     "id"
   >
 
@@ -143,6 +155,56 @@ export default class AppDB extends Dexie {
         id,
         updatedAt`,
     })
+    this.version(6).stores({
+      translationCache: `
+        key,
+        translation,
+        createdAt`,
+      batchRequestRecord: `
+        key,
+        createdAt,
+        originalRequestCount,
+        provider,
+        model`,
+      articleSummaryCache: `
+        key,
+        createdAt`,
+      aiSegmentationCache: `
+        key,
+        createdAt`,
+      learningItems: `
+        id,
+        normalizedText,
+        status,
+        kind,
+        source,
+        parentId,
+        updatedAt,
+        dueAt,
+        nextReviewAt,
+        maturity`,
+      vocabTestSessions: `
+        id,
+        createdAt,
+        updatedAt`,
+      reviewSessions: `
+        id,
+        createdAt,
+        updatedAt,
+        passed`,
+      githubLearningSyncConfig: `
+        id,
+        updatedAt`,
+      learningReviewLogs: `
+        id,
+        itemId,
+        sessionId,
+        reviewedAt,
+        updatedAt`,
+      learningSettings: `
+        id,
+        updatedAt`,
+    })
     this.translationCache.mapToClass(TranslationCache)
     this.batchRequestRecord.mapToClass(BatchRequestRecord)
     this.articleSummaryCache.mapToClass(ArticleSummaryCache)
@@ -151,5 +213,7 @@ export default class AppDB extends Dexie {
     this.vocabTestSessions.mapToClass(VocabTestSession)
     this.reviewSessions.mapToClass(ReviewSession)
     this.githubLearningSyncConfig.mapToClass(GithubLearningSyncConfig)
+    this.learningReviewLogs.mapToClass(LearningReviewLog)
+    this.learningSettings.mapToClass(LearningSettings)
   }
 }

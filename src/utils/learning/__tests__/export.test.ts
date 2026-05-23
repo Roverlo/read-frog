@@ -30,7 +30,17 @@ vi.mock("@/utils/db/dexie/db", () => ({
       get: vi.fn(async () => undefined),
       put: vi.fn(),
     },
-    transaction: vi.fn(async (_mode: string, _a: unknown, _b: unknown, _c: unknown, callback: () => Promise<void>) => {
+    learningReviewLogs: {
+      toArray: vi.fn(async () => []),
+      get: vi.fn(async () => undefined),
+      put: vi.fn(),
+    },
+    learningSettings: {
+      toCollection: vi.fn(() => ({ first: vi.fn(async () => undefined) })),
+      get: vi.fn(async () => undefined),
+      put: vi.fn(),
+    },
+    transaction: vi.fn(async (_mode: string, _tables: unknown, callback: () => Promise<void>) => {
       await callback()
     }),
   },
@@ -62,6 +72,8 @@ describe("learning export merge", () => {
         normalizedText: "remote",
         status: "learning",
         source: "manual",
+        tags: [],
+        maturity: "new",
         consecutivePasses: 0,
         reviewCount: 0,
         correctCount: 0,

@@ -25,4 +25,15 @@ describe("vocab-test", () => {
     expect(high).toBeGreaterThan(low)
     expect(low).toBeGreaterThanOrEqual(800)
   })
+
+  it("creates a default 20-question stratified test and summarizes weak levels", async () => {
+    const { createVocabQuestions, summarizeWeakLevels } = await import("../vocab-test")
+    const questions = createVocabQuestions()
+    const weakLevels = summarizeWeakLevels(questions, new Set())
+
+    expect(questions).toHaveLength(20)
+    expect(new Set(questions.map(question => question.level)).size).toBeGreaterThan(1)
+    expect(weakLevels.length).toBeGreaterThan(0)
+    expect(weakLevels.every(level => ["A1", "A2", "B1", "B2", "C1"].includes(level))).toBe(true)
+  })
 })

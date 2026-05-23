@@ -429,7 +429,7 @@ export function SelectionToolbar() {
   )
 
   const { features } = selectionToolbar
-  const isLearningFeatureEnabled = true
+  const isLearningFeatureEnabled = features.learning?.enabled ?? true
   const hasAnyEnabledFeature
     = features.translate.enabled
       || (!isFirefox && features.speak.enabled)
@@ -459,7 +459,7 @@ export function SelectionToolbar() {
             <div className="flex items-center overflow-x-auto overflow-y-hidden rounded-sm max-w-105 no-scrollbar">
               {features.translate.enabled && <TranslateButton />}
               {!isFirefox && features.speak.enabled && <SpeakButton />}
-              <SaveLearningButton />
+              {isLearningFeatureEnabled && <SaveLearningButton />}
               <SelectionToolbarCustomActionButtons />
             </div>
             <CloseButton />

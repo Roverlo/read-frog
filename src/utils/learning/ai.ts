@@ -1,5 +1,5 @@
 import type { LLMProviderConfig } from "@/types/config/provider"
-import type { LearningExplanation, LearningItem, ReviewQuestion } from "@/types/learning"
+import type { LearningExplanation, LearningItem, LearningItemKind, ReviewQuestion } from "@/types/learning"
 import { sendMessage } from "@/utils/message"
 import { resolveModelId } from "@/utils/providers/model-id"
 import { getProviderOptionsWithOverride } from "@/utils/providers/options"
@@ -70,6 +70,65 @@ export async function generateLearningExplanation(input: {
   }
 }
 
+export async function extractLearningChildren(input: {
+  text: string
+  context?: string
+  providerConfig?: LLMProviderConfig | null
+}) {
+  if (!input.providerConfig) {
+    return []
+  }
+
+  const response = await sendMessage("backgroundGenerateText", {
+    providerId: input.providerConfig.id,
+    system: "You are an English tutor for a Chinese learner. Return compact JSON only.",
+    prompt: [
+      "Extract the most useful English words, phrases, or sentence patterns from the selected content.",
+      "Return JSON with key items: array of objects { text, kind, meaningZh, notes, tags }.",
+      "kind must be one of word, phrase, sentence.",
+      "Limit to 8 items. Prefer high-value learning items over obvious words.",
+      `Selected content: ${input.text}`,
+      input.context ? `Context: ${input.context}` : "",
+    ].filter(Boolean).join("\n"),
+    temperature: input.providerConfig.temperature ?? 0.4,
+    providerOptions: buildProviderOptions(input.providerConfig),
+    maxRetries: 1,
+  })
+
+  try {
+    const jsonText = extractJsonObject(response.text)
+    if (!jsonText) {
+      return []
+    }
+    const parsed = JSON.parse(jsonText) as {
+      items?: Array<{
+        text?: unknown
+        kind?: unknown
+        meaningZh?: unknown
+        notes?: unknown
+        tags?: unknown
+      }>
+    }
+    return Array.isArray(parsed.items)
+      ? parsed.items
+          .map(item => ({
+            text: typeof item.text === "string" ? item.text.trim() : "",
+            kind: (item.kind === "word" || item.kind === "phrase" || item.kind === "sentence" ? item.kind : undefined) as LearningItemKind | undefined,
+            explanation: {
+              meaningZh: typeof item.meaningZh === "string" ? item.meaningZh : "AI 已抽取，等待补充解释。",
+              examples: [],
+              notes: typeof item.notes === "string" ? item.notes : undefined,
+            },
+            tags: Array.isArray(item.tags) ? item.tags.filter(Boolean).map(String) : [],
+          }))
+          .filter(item => item.text)
+      : []
+  }
+  catch {
+    return []
+  }
+}
+
 export interface GeneratedReviewMaterial {
   title: string
   material: string
@@ -80,6 +139,7 @@ export interface GeneratedReviewMaterial {
 export async function generateReviewMaterial(input: {
   items: LearningItem[]
   providerConfig?: LLMProviderConfig | null
+  mode?: "story" | "dialogue"
 }): Promise<GeneratedReviewMaterial> {
   const fallbackQuestions: ReviewQuestion[] = input.items.slice(0, 4).map(item => ({
     id: item.id,
@@ -113,7 +173,7 @@ export async function generateReviewMaterial(input: {
     providerId: input.providerConfig.id,
     system: "You are an English tutor. Return valid compact JSON only.",
     prompt: [
-      "Use the learning items to write an interesting short English passage or dialogue for a Chinese learner.",
+      `Use the learning items to write an interesting short English ${input.mode === "dialogue" ? "dialogue" : "passage"} for a Chinese learner.`,
       "Return JSON with keys: title, material, materialZh, questions.",
       "questions must be an array of objects: id, prompt, answer, choices, itemIds.",
       "Each question should have 4 Chinese choices and one exact answer included in choices.",

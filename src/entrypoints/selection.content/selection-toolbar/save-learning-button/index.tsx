@@ -5,7 +5,7 @@ import { useCallback, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { isLLMProviderConfig } from "@/types/config/provider"
 import { configFieldsAtomMap } from "@/utils/atoms/config"
-import { generateLearningExplanation } from "@/utils/learning/ai"
+import { extractLearningChildren, generateLearningExplanation } from "@/utils/learning/ai"
 import { upsertLearningItem } from "@/utils/learning/items"
 import { SelectionToolbarTooltip, useSelectionTooltipState } from "../../components/selection-tooltip"
 import { selectionSessionAtom } from "../atoms"
@@ -39,7 +39,7 @@ export function SaveLearningButton() {
         providerConfig,
       })
 
-      await upsertLearningItem({
+      const parent = await upsertLearningItem({
         text,
         context,
         source: "selection",
@@ -47,8 +47,24 @@ export function SaveLearningButton() {
         sourceUrl: location.href,
         explanation,
       })
+      const children = await extractLearningChildren({
+        text,
+        context,
+        providerConfig,
+      })
+      await Promise.all(children.map(child => upsertLearningItem({
+        text: child.text,
+        kind: child.kind,
+        context,
+        source: "selection",
+        sourceTitle: document.title || undefined,
+        sourceUrl: location.href,
+        parentId: parent.id,
+        explanation: child.explanation,
+        tags: child.tags,
+      })))
 
-      toast.success("已加入待学习库")
+      toast.success(children.length > 0 ? `已加入待学习库，并抽取 ${children.length} 个重点` : "已加入待学习库")
     }
     catch (error) {
       toast.error("保存到待学习库失败", {
