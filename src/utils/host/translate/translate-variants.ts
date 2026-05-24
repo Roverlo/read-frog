@@ -1,9 +1,12 @@
 import type { LangCodeISO6393 } from "@read-frog/definitions"
 import type { Config, InputTranslationLang } from "@/types/config/config"
-import { isLLMProviderConfig } from "@/types/config/provider"
+import type { ProviderConfig } from "@/types/config/provider"
+import { isAPIProviderConfig, isLLMProviderConfig } from "@/types/config/provider"
+import { getProviderConfigById } from "@/utils/config/helpers"
 import { getDetectedCodeFromStorage, getFinalSourceCode } from "@/utils/config/languages"
 import { resolveProviderConfig } from "@/utils/constants/feature-providers"
 import { detectLanguage } from "@/utils/content/language"
+import { buildLearningTranslationSummary } from "@/utils/learning/selective-translation"
 import { logger } from "@/utils/logger"
 import { getLocalConfig } from "../../config/storage"
 import { prepareTranslationText } from "./text-preparation"
@@ -26,6 +29,23 @@ async function isTextAlreadyInTargetLanguage(text: string, targetCode: LangCodeI
     return false
   const detected = await detectLanguage(text, { enableLLM: false })
   return detected === targetCode
+}
+
+function shouldFallbackFromProvider(providerConfig: ProviderConfig) {
+  return isAPIProviderConfig(providerConfig)
+    && !providerConfig.apiKey?.trim()
+    && !["deeplx", "ollama"].includes(providerConfig.provider)
+}
+
+function resolvePageTranslateProviderConfig(config: Config) {
+  const providerConfig = resolveProviderConfig(config, "translate")
+  if (!shouldFallbackFromProvider(providerConfig)) {
+    return providerConfig
+  }
+
+  return getProviderConfigById(config.providersConfig, "microsoft-translate-default")
+    ?? getProviderConfigById(config.providersConfig, "google-translate-default")
+    ?? providerConfig
 }
 
 async function getWebPagePromptContext(
@@ -58,6 +78,7 @@ async function translateTextUsingPageConfig(
   text: string,
   options: {
     extraHashTags?: string[]
+    applyLearningMode?: boolean
     webPageContext?: { webTitle?: string | null, webContent?: string | null, webSummary?: string | null }
   } = {},
 ): Promise<string> {
@@ -66,7 +87,7 @@ async function translateTextUsingPageConfig(
     return ""
   }
 
-  const providerConfig = resolveProviderConfig(config, "translate")
+  const providerConfig = resolvePageTranslateProviderConfig(config)
 
   if (
     config.translate.page.enableTargetLanguageSkip
@@ -90,6 +111,13 @@ async function translateTextUsingPageConfig(
     }
   }
 
+  if (options.applyLearningMode !== false && config.translate.page.learningMode.enabled) {
+    return buildLearningTranslationSummary(
+      preparedText,
+      config.translate.page.learningMode.maxTermsPerParagraph,
+    )
+  }
+
   return translateTextCore({
     text: preparedText,
     langConfig: config.language,
@@ -106,7 +134,7 @@ async function translateTextUsingPageConfig(
  */
 export async function translateTextForPage(text: string): Promise<string> {
   const config = await getConfigOrThrow()
-  const providerConfig = resolveProviderConfig(config, "translate")
+  const providerConfig = resolvePageTranslateProviderConfig(config)
   const webPageContext = await getWebPagePromptContext(providerConfig, config.translate.enableAIContentAware, true)
 
   return translateTextUsingPageConfig(config, text, {
@@ -120,12 +148,13 @@ export async function translateTextForPage(text: string): Promise<string> {
  */
 export async function translateTextForPageTitle(text: string): Promise<string> {
   const config = await getConfigOrThrow()
-  const providerConfig = resolveProviderConfig(config, "translate")
+  const providerConfig = resolvePageTranslateProviderConfig(config)
   const webPageContext = config.translate.enableAIContentAware
     ? await getWebPagePromptContext(providerConfig, true, false)
     : undefined
 
   return translateTextUsingPageConfig(config, text, {
+    applyLearningMode: false,
     extraHashTags: ["pageTitleTranslation"],
     webPageContext: {
       webTitle: text,

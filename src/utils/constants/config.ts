@@ -70,6 +70,10 @@ export const DEFAULT_CONFIG: Config = {
       minWordsPerNode: DEFAULT_MIN_WORDS_PER_NODE,
       enableTargetLanguageSkip: true,
       skipLanguages: [],
+      learningMode: {
+        enabled: false,
+        maxTermsPerParagraph: 6,
+      },
     },
     enableAIContentAware: false,
     customPromptsConfig: DEFAULT_TRANSLATE_PROMPTS_CONFIG,

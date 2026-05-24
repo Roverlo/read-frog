@@ -8,6 +8,7 @@ import { AlwaysTranslate } from "./components/always-translate"
 import BlogNotification from "./components/blog-notification"
 import { DiscordButton } from "./components/discord-button"
 import LanguageOptionsSelector from "./components/language-options-selector"
+import { LearningTranslationToggle } from "./components/learning-translation-toggle"
 import { MoreMenu } from "./components/more-menu"
 import Hotkey from "./components/node-translation-hotkey-selector"
 import { SiteControlToggle } from "./components/site-control-toggle"
@@ -33,6 +34,7 @@ function App() {
         <TranslationModeSelector />
         <TranslateProviderField />
         <TranslatePromptSelector />
+        <LearningTranslationToggle />
         <div className="w-full">
           <TranslateButton className="w-full" />
         </div>

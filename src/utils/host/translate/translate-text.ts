@@ -176,7 +176,15 @@ export function validateTranslationConfigAndToast(
   }
 
   // check if the API key is configured
-  if (isAPIProviderConfig(providerConfig) && !providerConfig.apiKey?.trim() && !["deeplx", "ollama"].includes(providerConfig.provider)) {
+  const hasBuiltInFallback = providersConfig.some(provider =>
+    provider.enabled && (provider.provider === "microsoft-translate" || provider.provider === "google-translate"),
+  )
+  if (
+    isAPIProviderConfig(providerConfig)
+    && !providerConfig.apiKey?.trim()
+    && !["deeplx", "ollama"].includes(providerConfig.provider)
+    && !hasBuiltInFallback
+  ) {
     toast.error(i18n.t("noAPIKeyConfig.warning"))
     logger.info("validateTranslationConfig: returning false (no API key)")
     return false

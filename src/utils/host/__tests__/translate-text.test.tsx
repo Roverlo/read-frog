@@ -40,6 +40,10 @@ vi.mock("@/utils/host/translate/webpage-summary", () => ({
   getOrGenerateWebPageSummary: vi.fn(),
 }))
 
+vi.mock("@/utils/learning/selective-translation", () => ({
+  buildLearningTranslationSummary: vi.fn(),
+}))
+
 let mockSendMessage: any
 let mockMicrosoftTranslate: any
 let mockGoogleTranslate: any
@@ -48,6 +52,18 @@ let mockGetTranslatePrompt: any
 let mockGetOrCreateWebPageContext: any
 let mockGetOrGenerateWebPageSummary: any
 let mockDetectLanguage: any
+let mockBuildLearningTranslationSummary: any
+
+function withOpenAIApiKey(config = DEFAULT_CONFIG) {
+  return {
+    ...config,
+    providersConfig: config.providersConfig.map(provider =>
+      provider.id === "openai-default"
+        ? { ...provider, apiKey: "test-openai-key" }
+        : provider,
+    ),
+  }
+}
 
 describe("translate-text", () => {
   beforeEach(async () => {
@@ -61,6 +77,7 @@ describe("translate-text", () => {
     mockGetTranslatePrompt = vi.mocked((await import("@/utils/prompts/translate")).getTranslatePrompt)
     mockGetOrCreateWebPageContext = vi.mocked((await import("@/utils/host/translate/webpage-context")).getOrCreateWebPageContext)
     mockGetOrGenerateWebPageSummary = vi.mocked((await import("@/utils/host/translate/webpage-summary")).getOrGenerateWebPageSummary)
+    mockBuildLearningTranslationSummary = vi.mocked((await import("@/utils/learning/selective-translation")).buildLearningTranslationSummary)
     mockDetectLanguage = vi.mocked(detectLanguage)
 
     // Mock getOrCreateWebPageContext to return stable webpage metadata
@@ -79,6 +96,7 @@ describe("translate-text", () => {
       systemPrompt: "Translate to {{targetLang}}",
       prompt: "{{input}}",
     })
+    mockBuildLearningTranslationSummary.mockResolvedValue("")
   })
 
   describe("translateTextForPage", () => {
@@ -161,12 +179,36 @@ describe("translate-text", () => {
       })
       expect(mockSendMessage).not.toHaveBeenCalled()
     })
+
+    it("uses learning translation summaries instead of full translation when learning mode is enabled", async () => {
+      const config = {
+        ...DEFAULT_CONFIG,
+        translate: {
+          ...DEFAULT_CONFIG.translate,
+          page: {
+            ...DEFAULT_CONFIG.translate.page,
+            learningMode: {
+              enabled: true,
+              maxTermsPerParagraph: 3,
+            },
+          },
+        },
+      }
+      mockGetConfigFromStorage.mockResolvedValue(config)
+      mockBuildLearningTranslationSummary.mockResolvedValue("workflow: 工作流程")
+
+      const result = await translateTextForPage("This workflow is feasible.")
+
+      expect(result).toBe("workflow: 工作流程")
+      expect(mockBuildLearningTranslationSummary).toHaveBeenCalledWith("This workflow is feasible.", 3)
+      expect(mockSendMessage).not.toHaveBeenCalled()
+    })
   })
 
   describe("translateTextForPageTitle", () => {
     it("should use the latest original title instead of document.title when building webpage context", async () => {
       const llmConfig = {
-        ...DEFAULT_CONFIG,
+        ...withOpenAIApiKey(),
         translate: {
           ...DEFAULT_CONFIG.translate,
           providerId: "openai-default",
@@ -197,7 +239,7 @@ describe("translate-text", () => {
 
     it("should include webpage content for AI-aware title translation", async () => {
       const llmConfig = {
-        ...DEFAULT_CONFIG,
+        ...withOpenAIApiKey(),
         translate: {
           ...DEFAULT_CONFIG.translate,
           providerId: "openai-default",
@@ -228,7 +270,7 @@ describe("translate-text", () => {
 
     it("should forward document.title to regular page translations", async () => {
       const llmConfig = {
-        ...DEFAULT_CONFIG,
+        ...withOpenAIApiKey(),
         translate: {
           ...DEFAULT_CONFIG.translate,
           providerId: "openai-default",
@@ -274,7 +316,7 @@ describe("translate-text", () => {
 
     it("includes webpage summary for AI-aware llm input translations", async () => {
       const llmConfig = {
-        ...DEFAULT_CONFIG,
+        ...withOpenAIApiKey(),
         translate: {
           ...DEFAULT_CONFIG.translate,
           enableAIContentAware: true,

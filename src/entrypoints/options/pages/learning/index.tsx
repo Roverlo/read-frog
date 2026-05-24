@@ -930,6 +930,11 @@ export function LearningPage() {
 
 function LearningPreferencesPanel({ settings, onChanged }: { settings: LearningSettings, onChanged: () => void }) {
   const [selectionToolbar, setSelectionToolbar] = useAtom(configFieldsAtomMap.selectionToolbar)
+  const [translateConfig, setTranslateConfig] = useAtom(configFieldsAtomMap.translate)
+  const learningMode = translateConfig.page.learningMode ?? {
+    enabled: false,
+    maxTermsPerParagraph: 6,
+  }
   const [desiredRetention, setDesiredRetention] = useState(String(settings.desiredRetention))
 
   const save = async (patch: Partial<Omit<LearningSettings, "id" | "updatedAt">>) => {
@@ -943,6 +948,19 @@ function LearningPreferencesPanel({ settings, onChanged }: { settings: LearningS
       features: {
         ...selectionToolbar.features,
         learning: {
+          enabled,
+        },
+      },
+    })
+  }
+
+  const setLearningTranslationEnabled = (enabled: boolean) => {
+    void setTranslateConfig({
+      ...translateConfig,
+      page: {
+        ...translateConfig.page,
+        learningMode: {
+          ...learningMode,
           enabled,
         },
       },
@@ -991,6 +1009,13 @@ function LearningPreferencesPanel({ settings, onChanged }: { settings: LearningS
               <div className="text-xs text-muted-foreground">控制选中文本工具栏里的书签按钮。</div>
             </div>
             <Switch checked={selectionToolbar.features.learning?.enabled ?? true} onCheckedChange={setLearningToolbarEnabled} />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium">学习翻译</div>
+              <div className="text-xs text-muted-foreground">页面翻译只提示未掌握词，已掌握词不重复翻译。</div>
+            </div>
+            <Switch checked={learningMode.enabled} onCheckedChange={setLearningTranslationEnabled} />
           </div>
         </div>
       </CardContent>
