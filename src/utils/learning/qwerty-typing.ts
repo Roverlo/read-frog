@@ -1,19 +1,10 @@
-import type { LearningReviewRating, QwertyTypingRecord } from "@/types/learning"
+import type { QwertyTypingRecord } from "@/types/learning"
 import type { QwertyDictResource, QwertyTypingResult, QwertyWordWithIndex } from "./qwerty-dicts"
 import { getRandomUUID } from "@/utils/crypto-polyfill"
 import { db } from "@/utils/db/dexie/db"
 import { markLearningItemReviewRating, upsertLearningItem } from "./items"
 import { getWordMeaning } from "./qwerty-dicts"
-
-export function getTypingRating(result: QwertyTypingResult): LearningReviewRating {
-  if (result.correct) {
-    return "good"
-  }
-  if (result.accuracy >= 80) {
-    return "hard"
-  }
-  return "again"
-}
+import { getTypingRating } from "./qwerty-rating"
 
 export async function saveQwertyTypingResult(input: {
   dict: QwertyDictResource

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 describe("qwerty-typing", () => {
   it("maps typing accuracy to review ratings", async () => {
-    const { getTypingRating } = await import("../qwerty-typing")
+    const { getTypingRating } = await import("../qwerty-rating")
 
     expect(getTypingRating({
       correct: true,

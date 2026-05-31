@@ -94,11 +94,35 @@ describe("initializeConfig", () => {
     await initializeConfig()
 
     expect(setItemMock).toHaveBeenCalledTimes(1)
-    expect(setItemMock).toHaveBeenCalledWith("local:config", expect.any(Object))
+    expect(setItemMock).toHaveBeenCalledWith("local:config", expect.objectContaining({
+      betaExperience: {
+        enabled: true,
+      },
+    }))
     expect(setMetaMock).toHaveBeenCalledTimes(1)
     expect(setMetaMock).toHaveBeenCalledWith("local:config", expect.objectContaining({
       schemaVersion: CONFIG_SCHEMA_VERSION,
       lastModifiedAt: expect.any(Number),
+    }))
+  })
+
+  it("enables beta experience for existing fork configs", async () => {
+    const config = buildStableConfig()
+    config.betaExperience.enabled = false
+    getItemMock.mockResolvedValueOnce(config)
+    getMetaMock.mockResolvedValueOnce({
+      schemaVersion: CONFIG_SCHEMA_VERSION,
+      lastModifiedAt: 123,
+    })
+
+    const { initializeConfig } = await import("../init")
+    await initializeConfig()
+
+    expect(setItemMock).toHaveBeenCalledTimes(1)
+    expect(setItemMock).toHaveBeenCalledWith("local:config", expect.objectContaining({
+      betaExperience: {
+        enabled: true,
+      },
     }))
   })
 
