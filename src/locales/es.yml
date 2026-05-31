@@ -76,9 +76,9 @@ options:
     please: Configura la clave API en
     page: página
   betaExperience:
-    title: Experiencia beta
-    description: Activa funciones experimentales y acceso anticipado a nuevas funcionalidades. Estas funciones pueden ser inestables o estar incompletas.
-    enabled: Activar experiencia beta
+    title: Funciones experimentales
+    description: Mantén disponibles las funciones experimentales en este fork. Algunas opciones pueden seguir dependiendo de servicios externos.
+    enabled: Activar funciones experimentales
   apiProviders:
     title: Proveedores de API
     description: Configura proveedores de API para traducción e información de vocabulario. Tenemos más de 20 proveedores integrados y admitimos cualquier proveedor de API compatible con OpenAI.
@@ -403,8 +403,6 @@ options:
             emptyTitle: Aún no hay Notebases
             emptyDescription: Crea una Notebase en readfrog.app y vuelve aquí para asignar campos.
             openNotebaseAction: Abrir Notebase
-            betaLockedTitle: Esta cuenta no está en la beta de Notebase
-            betaLockedDescription: Puedes mantener esta acción configurada, pero elegir Notebases y sincronizar resultados está limitado por ahora a cuentas beta seleccionadas.
             tableUnavailableTitle: La Notebase seleccionada ya no está disponible
             tableUnavailableDescription: Actualiza o elige otra Notebase antes de volver a guardar.
             tableUnavailableOption: no disponible
@@ -749,7 +747,7 @@ options:
     volume:
       label: Volumen (%)
       hint: Acepta valores enteros entre -100 y 100
-    betaDisabled: Activa Experiencia beta para personalizar la configuración de texto a voz.
+    betaDisabled: Activa Funciones experimentales para personalizar la configuración de texto a voz.
   statistics:
     title: Estadísticas
     batchRequest:
@@ -997,7 +995,6 @@ action:
   saveToNotebaseSuccess: Guardado en Notebase
   saveToNotebaseFailed: No se pudo guardar en Notebase
   saveToNotebaseLoginRequired: Inicia sesión en readfrog.app para guardar en Notebase
-  saveToNotebaseBetaRequired: Esta cuenta aún no está inscrita en la beta de Notebase
   saveToNotebaseTableUnavailable: La Notebase seleccionada ya no está disponible
   saveToNotebaseConnectionInvalid: Esta conexión de Notebase está desactualizada. Actualízala en Acciones AI personalizadas y corrige las asignaciones.
   saveToNotebaseNoMappings: Añade al menos una asignación válida antes de guardar

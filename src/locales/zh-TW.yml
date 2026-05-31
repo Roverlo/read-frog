@@ -76,9 +76,9 @@ options:
     please: 請在
     page: 頁設置 API Key
   betaExperience:
-    title: Beta 體驗
-    description: 啟用實驗性功能和早期訪問新功能。這些功能可能不穩定或不完整。
-    enabled: 啟用 Beta 體驗
+    title: 實驗功能
+    description: 啟用此 fork 中的實驗功能。部分功能仍可能依賴外部服務連線。
+    enabled: 啟用實驗功能
   apiProviders:
     title: API 提供商
     description: 配置用於翻譯和詞彙解析功能的 API 提供商。我們內建了 20 多個提供商，並支援任何 OpenAI 相容 API 提供商。
@@ -402,8 +402,6 @@ options:
             emptyTitle: 還沒有筆記庫
             emptyDescription: 先到 readfrog.app 建立一個筆記庫，再回來映射欄位。
             openNotebaseAction: 開啟筆記庫
-            betaLockedTitle: 目前帳號尚未加入 Notebase Beta
-            betaLockedDescription: 你可以保留目前的 action 設定，但選擇筆記庫與同步結果目前僅對部分 Beta 帳號開放。
             tableUnavailableTitle: 選取的筆記庫已不可用
             tableUnavailableDescription: 請重新整理，或改選其他筆記庫後再儲存。
             tableUnavailableOption: 不可用
@@ -634,7 +632,7 @@ options:
     volume:
       label: 音量 (%)
       hint: 支援 -100 到 100 的整數
-    betaDisabled: 啟用 Beta 體驗即可自訂文字轉語音設定。
+    betaDisabled: 啟用實驗功能即可自訂文字轉語音設定。
   statistics:
     title: 統計
     batchRequest:
@@ -882,7 +880,6 @@ action:
   saveToNotebaseSuccess: 已儲存到筆記庫
   saveToNotebaseFailed: 儲存到筆記庫失敗
   saveToNotebaseLoginRequired: 請先到 readfrog.app 登入後再儲存到筆記庫
-  saveToNotebaseBetaRequired: 目前帳號尚未加入 Notebase Beta
   saveToNotebaseTableUnavailable: 選取的筆記庫已不可用
   saveToNotebaseConnectionInvalid: 目前的筆記庫連線已過期，請到 Custom AI Actions 重新整理並修復映射
   saveToNotebaseNoMappings: 至少新增一個有效映射後才能儲存
