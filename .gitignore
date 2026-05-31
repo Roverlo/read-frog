@@ -44,5 +44,6 @@ docs/
 /repos
 
 scripts/output/
+output/functional-verification/
 
 reference/
