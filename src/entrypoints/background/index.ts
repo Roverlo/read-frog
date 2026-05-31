@@ -14,6 +14,7 @@ import { initializeContextMenu, registerContextMenuListeners } from "./context-m
 import { cleanupAllAiSegmentationCache, cleanupAllSummaryCache, cleanupAllTranslationCache, setUpDatabaseCleanup } from "./db-cleanup"
 import { setupEdgeTTSMessageHandlers } from "./edge-tts"
 import { setupIframeInjection } from "./iframe-injection"
+import { setupLearningBridgeMessageHandlers } from "./learning-bridge"
 import { setupLLMGenerateTextMessageHandlers } from "./llm-generate-text"
 import { initMockData } from "./mock-data"
 import { newUserGuide } from "./new-user-guide"
@@ -104,6 +105,7 @@ export default defineBackground({
     void setupUninstallSurvey()
 
     proxyFetch()
+    setupLearningBridgeMessageHandlers()
     setupEdgeTTSMessageHandlers()
     setupLLMGenerateTextMessageHandlers()
     setupTTSPlaybackMessageHandlers()

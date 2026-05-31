@@ -7,6 +7,7 @@ import { isLLMProviderConfig } from "@/types/config/provider"
 import { configFieldsAtomMap } from "@/utils/atoms/config"
 import { extractLearningChildren, generateLearningExplanation } from "@/utils/learning/ai"
 import { upsertLearningItem } from "@/utils/learning/items"
+import { sendMessage } from "@/utils/message"
 import { SelectionToolbarTooltip, useSelectionTooltipState } from "../../components/selection-tooltip"
 import { selectionSessionAtom } from "../atoms"
 
@@ -63,6 +64,20 @@ export function SaveLearningButton() {
         explanation: child.explanation,
         tags: child.tags,
       })))
+
+      void sendMessage("syncLearningCaptureSelection", {
+        text,
+        context,
+        sourceTitle: document.title || undefined,
+        sourceUrl: location.href,
+        explanation,
+        extractedItems: children.map(child => ({
+          text: child.text,
+          kind: child.kind,
+          explanation: child.explanation,
+          tags: child.tags,
+        })),
+      }).catch(() => {})
 
       toast.success(children.length > 0 ? `已加入待学习库，并抽取 ${children.length} 个重点` : "已加入待学习库")
     }

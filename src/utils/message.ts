@@ -19,6 +19,12 @@ import type {
   TTSPlaybackStartResponse,
   TTSPlaybackStopRequest,
 } from "@/types/tts-playback"
+import type {
+  LearningBridgeCaptureResult,
+  LearningBridgeFlushResult,
+  LearningBridgeStatus,
+} from "@/utils/learning-bridge"
+import type { LearningCaptureSelectionInput } from "@/utils/learning-contracts"
 import type { EdgeTTSVoice } from "@/utils/server/edge-tts/types"
 import { defineExtensionMessaging } from "@webext-core/messaging"
 
@@ -69,6 +75,10 @@ interface ProtocolMap {
   microsoftBatchTranslate: (data: { texts: string[], fromLang: string, toLang: string }) => Promise<string[]>
   // network proxy
   backgroundFetch: (data: ProxyRequest) => Promise<ProxyResponse>
+  // learning container bridge
+  getLearningBridgeStatus: () => Promise<LearningBridgeStatus>
+  syncLearningCaptureSelection: (data: LearningCaptureSelectionInput) => Promise<LearningBridgeCaptureResult>
+  flushLearningBridgeQueue: () => Promise<LearningBridgeFlushResult>
   // cache management
   clearAllTranslationRelatedCache: () => Promise<void>
   clearAiSegmentationCache: () => Promise<void>
