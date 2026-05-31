@@ -1,0 +1,124 @@
+import type { Server } from "node:http"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { LEARNING_CONTRACT_VERSION, LEARNING_DAEMON_SERVICE } from "../../../src/utils/learning-contracts/schemas.ts"
+import { createLearningDaemonServer } from "../src/server.ts"
+import { createFileLearningDaemonStore } from "../src/store.ts"
+
+async function listen(server: Server) {
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve)
+  })
+  const address = server.address()
+  if (!address || typeof address !== "object") {
+    throw new Error("Expected server address")
+  }
+  return `http://127.0.0.1:${address.port}`
+}
+
+describe("learning daemon server", () => {
+  let dataDir: string
+  let server: Server
+  let baseUrl: string
+
+  beforeEach(async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "readfrog-learning-daemon-"))
+    server = createLearningDaemonServer({
+      store: createFileLearningDaemonStore(dataDir),
+    })
+    baseUrl = await listen(server)
+  })
+
+  afterEach(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error)
+        }
+        else {
+          resolve()
+        }
+      })
+    })
+    await rm(dataDir, { recursive: true, force: true })
+  })
+
+  it("serves health with the shared contract version", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/health`)
+
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      service: LEARNING_DAEMON_SERVICE,
+      contractVersion: LEARNING_CONTRACT_VERSION,
+      projectionVersion: "projection-0",
+    })
+  })
+
+  it("stores selection captures and exposes a mastery projection", async () => {
+    const captureResponse = await fetch(`${baseUrl}/api/v1/capture/selection`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: new Blob([JSON.stringify({
+        id: "capture-1",
+        text: "repeatable workflow",
+        context: "A repeatable workflow helps teams improve.",
+        createdAt: "2026-06-01T00:00:00.000Z",
+        explanation: { meaningZh: "可重复的工作流" },
+        extractedItems: [
+          {
+            text: "workflow",
+            kind: "word",
+            explanation: { meaningZh: "工作流" },
+            tags: ["source:selection"],
+          },
+        ],
+      })]),
+    })
+
+    await expect(captureResponse.json()).resolves.toEqual({
+      ok: true,
+      itemIds: ["capture-1", "capture-1:child:0"],
+      projectionVersion: "projection-1",
+    })
+
+    const projectionResponse = await fetch(`${baseUrl}/api/v1/projection`)
+    await expect(projectionResponse.json()).resolves.toMatchObject({
+      ok: true,
+      projectionVersion: "projection-1",
+      eventId: "event-1",
+      entries: [
+        {
+          normalizedText: "repeatable workflow",
+          kind: "phrase",
+          status: "learning",
+          confidence: 0.35,
+          definition: "可重复的工作流",
+        },
+        {
+          normalizedText: "workflow",
+          kind: "word",
+          status: "learning",
+          confidence: 0.35,
+          definition: "工作流",
+        },
+      ],
+    })
+  })
+
+  it("answers extension preflight requests with a matching CORS origin", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/capture/selection`, {
+      method: "OPTIONS",
+      headers: {
+        "origin": "chrome-extension://extension-id",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "authorization,content-type",
+      },
+    })
+
+    expect(response.status).toBe(204)
+    expect(response.headers.get("access-control-allow-origin")).toBe("chrome-extension://extension-id")
+    expect(response.headers.get("access-control-allow-headers")).toContain("authorization")
+  })
+})

@@ -14,6 +14,7 @@
     "dev": "wxt",
     "dev:edge": "wxt -b edge",
     "dev:firefox": "wxt -b firefox --mv3",
+    "learning:daemon": "node --experimental-strip-types apps/learning-daemon/src/cli.ts",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
     "postinstall": "WXT_SKIP_ENV_VALIDATION=true wxt prepare",

@@ -541,10 +541,12 @@ volumes:
 Milestone 1:
 
 - Node daemon and Vite web app running directly through pnpm.
+- Initial daemon API may use an appendable JSON/file store while the bridge and contracts stabilize.
 
 Milestone 2:
 
 - Docker Compose for local data isolation and reproducible testing.
+- SQLite store and migrations replace the initial JSON/file store.
 
 Milestone 3:
 

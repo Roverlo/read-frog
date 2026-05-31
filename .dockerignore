@@ -1,0 +1,13 @@
+node_modules
+.output
+.wxt
+.git
+coverage
+output
+stats.html
+stats-*.html
+stats-*.json
+scripts/output
+reference
+.readfrog-learning
+*.log

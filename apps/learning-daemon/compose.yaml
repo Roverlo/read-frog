@@ -1,0 +1,16 @@
+services:
+  learning-daemon:
+    build:
+      context: ../..
+      dockerfile: apps/learning-daemon/Dockerfile
+    environment:
+      READFROG_LEARNING_HOST: 0.0.0.0
+      READFROG_LEARNING_PORT: 7457
+      READFROG_LEARNING_DATA_DIR: /data
+    ports:
+      - "127.0.0.1:7457:7457"
+    volumes:
+      - readfrog-learning-data:/data
+
+volumes:
+  readfrog-learning-data:
