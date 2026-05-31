@@ -4,6 +4,7 @@ const onMessageMock = vi.fn()
 const getLearningBridgeStatusMock = vi.fn()
 const syncLearningCaptureSelectionMock = vi.fn()
 const flushLearningBridgeQueueMock = vi.fn()
+const getLearningProjectionTermsMock = vi.fn()
 
 vi.mock("@/utils/message", () => ({
   onMessage: onMessageMock,
@@ -13,6 +14,7 @@ vi.mock("@/utils/learning-bridge", () => ({
   getLearningBridgeStatus: getLearningBridgeStatusMock,
   syncLearningCaptureSelection: syncLearningCaptureSelectionMock,
   flushLearningBridgeQueue: flushLearningBridgeQueueMock,
+  getLearningProjectionTerms: getLearningProjectionTermsMock,
 }))
 
 function getRegisteredMessageHandler(name: string) {
@@ -36,13 +38,18 @@ describe("background learning bridge", () => {
     getLearningBridgeStatusMock.mockResolvedValue({ state: "offline" })
     syncLearningCaptureSelectionMock.mockResolvedValue({ status: "queued" })
     flushLearningBridgeQueueMock.mockResolvedValue({ status: "flushed" })
+    getLearningProjectionTermsMock.mockResolvedValue({ status: "ok", entries: [] })
 
     await expect(getRegisteredMessageHandler("getLearningBridgeStatus")({ data: {} })).resolves.toEqual({ state: "offline" })
     await expect(getRegisteredMessageHandler("syncLearningCaptureSelection")({
       data: { text: "workflow" },
     })).resolves.toEqual({ status: "queued" })
     await expect(getRegisteredMessageHandler("flushLearningBridgeQueue")({ data: {} })).resolves.toEqual({ status: "flushed" })
+    await expect(getRegisteredMessageHandler("getLearningProjectionTerms")({
+      data: { terms: ["workflow"] },
+    })).resolves.toEqual({ status: "ok", entries: [] })
 
     expect(syncLearningCaptureSelectionMock).toHaveBeenCalledWith({ text: "workflow" })
+    expect(getLearningProjectionTermsMock).toHaveBeenCalledWith(["workflow"])
   })
 })

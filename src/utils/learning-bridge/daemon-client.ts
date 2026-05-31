@@ -101,3 +101,15 @@ export async function getLearningMasteryProjection(
   const query = options.since ? `?since=${encodeURIComponent(options.since)}` : ""
   return requestJson(`/api/v1/projection${query}`, masteryProjectionResponseSchema, options)
 }
+
+export async function getLearningMasteryProjectionTerms(
+  terms: string[],
+  options: LearningDaemonClientOptions,
+): Promise<MasteryProjectionResponse> {
+  const query = terms
+    .map(term => term.trim())
+    .filter(Boolean)
+    .map(term => `terms=${encodeURIComponent(term)}`)
+    .join("&")
+  return requestJson(`/api/v1/projection/terms?${query}`, masteryProjectionResponseSchema, options)
+}

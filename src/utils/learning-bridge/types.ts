@@ -1,6 +1,7 @@
 import type {
   LearningCaptureSelectionRequest,
   LearningDaemonHealthResponse,
+  MasteryProjectionEntry,
 } from "@/utils/learning-contracts"
 
 export interface LearningBridgeConfig {
@@ -36,6 +37,13 @@ export interface LearningBridgeFlushResult {
   status: "flushed" | "offline" | "disabled"
   pendingCaptureCount: number
   flushedCaptureCount: number
+  error?: string
+}
+
+export interface LearningBridgeProjectionTermsResult {
+  status: "ok" | "offline" | "disabled" | "incompatible"
+  projectionVersion?: string
+  entries: MasteryProjectionEntry[]
   error?: string
 }
 

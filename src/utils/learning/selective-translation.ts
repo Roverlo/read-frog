@@ -1,5 +1,8 @@
 import type { LearningItem } from "@/types/learning"
+import type { MasteryProjectionEntry } from "@/utils/learning-contracts"
 import { db } from "@/utils/db/dexie/db"
+import { MAX_MASTERY_PROJECTION_TERMS } from "@/utils/learning-contracts"
+import { sendMessage } from "@/utils/message"
 import { normalizeLearningText } from "./items"
 import { VOCAB_LIST } from "./vocab-list"
 
@@ -64,6 +67,32 @@ function findDefinitionForWord(word: string) {
   return undefined
 }
 
+function findProjectionEntryForWord(entriesByText: Map<string, MasteryProjectionEntry>, word: string) {
+  return getCandidateForms(word)
+    .map(form => entriesByText.get(form))
+    .find(Boolean)
+}
+
+async function getProjectionEntriesByWord(uniqueWords: string[]) {
+  try {
+    const terms = [...new Set(uniqueWords.flatMap(getCandidateForms))]
+      .slice(0, MAX_MASTERY_PROJECTION_TERMS)
+    const response = await sendMessage("getLearningProjectionTerms", { terms })
+    if (response.status !== "ok") {
+      return new Map<string, MasteryProjectionEntry>()
+    }
+
+    return new Map(
+      response.entries
+        .filter(entry => entry.kind === "word")
+        .map(entry => [entry.normalizedText, entry]),
+    )
+  }
+  catch {
+    return new Map<string, MasteryProjectionEntry>()
+  }
+}
+
 export async function buildLearningTranslationSummary(text: string, maxTerms: number): Promise<string> {
   const tokens = [...text.matchAll(ENGLISH_WORD_RE)]
     .map(match => normalizeToken(match[0]))
@@ -74,20 +103,28 @@ export async function buildLearningTranslationSummary(text: string, maxTerms: nu
   }
 
   const uniqueWords = [...new Set(tokens)]
-  const items = await db.learningItems
-    .where("kind")
-    .equals("word")
-    .toArray()
+  const [projectionEntriesByText, items] = await Promise.all([
+    getProjectionEntriesByWord(uniqueWords),
+    db.learningItems
+      .where("kind")
+      .equals("word")
+      .toArray(),
+  ])
   const itemsByText = new Map(items.map(item => [item.normalizedText, item]))
 
   const terms: LearningTranslationTerm[] = []
   for (const word of uniqueWords) {
-    const item = findLearningItemForWord(itemsByText, word)
-    if (item?.status === "mastered") {
+    const projectionEntry = findProjectionEntryForWord(projectionEntriesByText, word)
+    if (projectionEntry?.status === "mature" || projectionEntry?.status === "archived") {
       continue
     }
 
-    const definitionZh = item?.explanation?.meaningZh ?? findDefinitionForWord(word)
+    const item = findLearningItemForWord(itemsByText, word)
+    if (!projectionEntry && item?.status === "mastered") {
+      continue
+    }
+
+    const definitionZh = projectionEntry?.definition ?? item?.explanation?.meaningZh ?? findDefinitionForWord(word)
     if (!definitionZh) {
       continue
     }
@@ -95,7 +132,9 @@ export async function buildLearningTranslationSummary(text: string, maxTerms: nu
     terms.push({
       word,
       definitionZh,
-      status: item?.status === "learning" ? "learning" : "dictionary",
+      status: projectionEntry && projectionEntry.status !== "unknown"
+        ? "learning"
+        : item?.status === "learning" ? "learning" : "dictionary",
     })
 
     if (terms.length >= maxTerms) {

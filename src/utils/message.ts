@@ -22,6 +22,7 @@ import type {
 import type {
   LearningBridgeCaptureResult,
   LearningBridgeFlushResult,
+  LearningBridgeProjectionTermsResult,
   LearningBridgeStatus,
 } from "@/utils/learning-bridge"
 import type { LearningCaptureSelectionInput } from "@/utils/learning-contracts"
@@ -79,6 +80,7 @@ interface ProtocolMap {
   getLearningBridgeStatus: () => Promise<LearningBridgeStatus>
   syncLearningCaptureSelection: (data: LearningCaptureSelectionInput) => Promise<LearningBridgeCaptureResult>
   flushLearningBridgeQueue: () => Promise<LearningBridgeFlushResult>
+  getLearningProjectionTerms: (data: { terms: string[] }) => Promise<LearningBridgeProjectionTermsResult>
   // cache management
   clearAllTranslationRelatedCache: () => Promise<void>
   clearAiSegmentationCache: () => Promise<void>

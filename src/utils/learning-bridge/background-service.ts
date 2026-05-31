@@ -2,6 +2,7 @@ import type {
   LearningBridgeCaptureResult,
   LearningBridgeConfig,
   LearningBridgeFlushResult,
+  LearningBridgeProjectionTermsResult,
   LearningBridgeStatus,
   LearningCaptureQueueStore,
 } from "./types"
@@ -9,13 +10,14 @@ import type {
   LearningCaptureSelectionInput,
   LearningCaptureSelectionRequest,
   LearningDaemonHealthResponse,
+  MasteryProjectionResponse,
 } from "@/utils/learning-contracts"
 import { getRandomUUID } from "@/utils/crypto-polyfill"
 import {
   createLearningCaptureSelectionRequest,
   LEARNING_CONTRACT_VERSION,
 } from "@/utils/learning-contracts"
-import { getLearningDaemonHealth, postLearningCaptureSelection } from "./daemon-client"
+import { getLearningDaemonHealth, getLearningMasteryProjectionTerms, postLearningCaptureSelection } from "./daemon-client"
 import {
   enqueuePendingLearningCapture,
   getLearningBridgeConfig,
@@ -26,6 +28,7 @@ import {
 export interface LearningDaemonBridgeClient {
   getHealth: (config: LearningBridgeConfig) => Promise<LearningDaemonHealthResponse>
   captureSelection: (capture: LearningCaptureSelectionRequest, config: LearningBridgeConfig) => Promise<unknown>
+  getProjectionTerms: (terms: string[], config: LearningBridgeConfig) => Promise<MasteryProjectionResponse>
 }
 
 export interface LearningBridgeServiceDeps {
@@ -51,6 +54,10 @@ function getDefaultClient(): LearningDaemonBridgeClient {
       token: config.token,
     }),
     captureSelection: (capture, config) => postLearningCaptureSelection(capture, {
+      baseUrl: config.baseUrl,
+      token: config.token,
+    }),
+    getProjectionTerms: (terms, config) => getLearningMasteryProjectionTerms(terms, {
       baseUrl: config.baseUrl,
       token: config.token,
     }),
@@ -150,6 +157,46 @@ export async function flushLearningBridgeQueue(
     status: "flushed",
     pendingCaptureCount: 0,
     flushedCaptureCount,
+  }
+}
+
+export async function getLearningProjectionTerms(
+  terms: string[],
+  deps: LearningBridgeServiceDeps = {},
+): Promise<LearningBridgeProjectionTermsResult> {
+  const { store, client } = getDeps(deps)
+  const config = await store.getConfig()
+
+  if (!config.enabled) {
+    return {
+      status: "disabled",
+      entries: [],
+    }
+  }
+
+  try {
+    const health = await client.getHealth(config)
+    if (getHealthState(health) !== "connected") {
+      return {
+        status: "incompatible",
+        entries: [],
+        error: `Expected contract ${LEARNING_CONTRACT_VERSION}, got ${health.contractVersion}`,
+      }
+    }
+
+    const projection = await client.getProjectionTerms(terms, config)
+    return {
+      status: "ok",
+      projectionVersion: projection.projectionVersion,
+      entries: projection.entries,
+    }
+  }
+  catch (error) {
+    return {
+      status: "offline",
+      entries: [],
+      error: getErrorMessage(error),
+    }
   }
 }
 

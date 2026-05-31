@@ -44,6 +44,7 @@ describe("learning bridge background service", () => {
     const client = {
       getHealth: vi.fn(async () => createHealth()),
       captureSelection: vi.fn(),
+      getProjectionTerms: vi.fn(),
     }
 
     await expect(getLearningBridgeStatus({ store, client })).resolves.toEqual({
@@ -62,6 +63,7 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(async () => {
         throw new Error("daemon offline")
       }),
+      getProjectionTerms: vi.fn(),
     }
 
     const result = await syncLearningCaptureSelection({
@@ -103,6 +105,7 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(async (capture: LearningCaptureSelectionRequest) => {
         syncedIds.push(capture.id)
       }),
+      getProjectionTerms: vi.fn(),
     }
 
     const result = await syncLearningCaptureSelection({
@@ -121,5 +124,57 @@ describe("learning bridge background service", () => {
     })
     expect(syncedIds).toEqual(["queued-1", "capture-2"])
     expect(getPending()).toEqual([])
+  })
+
+  it("returns projection entries from a connected daemon", async () => {
+    const { getLearningProjectionTerms } = await import("../background-service")
+    const { store } = createStore()
+    const client = {
+      getHealth: vi.fn(async () => createHealth()),
+      captureSelection: vi.fn(),
+      getProjectionTerms: vi.fn(async (terms: string[]) => ({
+        ok: true as const,
+        projectionVersion: "projection-2",
+        entries: terms.map(term => ({
+          normalizedText: term,
+          kind: "word" as const,
+          status: "learning" as const,
+          confidence: 0.35,
+          definition: "工作流",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        })),
+      })),
+    }
+
+    await expect(getLearningProjectionTerms(["workflow"], { store, client })).resolves.toEqual({
+      status: "ok",
+      projectionVersion: "projection-2",
+      entries: [{
+        normalizedText: "workflow",
+        kind: "word",
+        status: "learning",
+        confidence: 0.35,
+        definition: "工作流",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      }],
+    })
+  })
+
+  it("returns an offline projection result when the daemon cannot be reached", async () => {
+    const { getLearningProjectionTerms } = await import("../background-service")
+    const { store } = createStore()
+    const client = {
+      getHealth: vi.fn(async () => {
+        throw new Error("daemon offline")
+      }),
+      captureSelection: vi.fn(),
+      getProjectionTerms: vi.fn(),
+    }
+
+    await expect(getLearningProjectionTerms(["workflow"], { store, client })).resolves.toEqual({
+      status: "offline",
+      entries: [],
+      error: "daemon offline",
+    })
   })
 })

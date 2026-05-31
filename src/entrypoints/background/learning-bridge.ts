@@ -1,6 +1,7 @@
 import {
   flushLearningBridgeQueue,
   getLearningBridgeStatus,
+  getLearningProjectionTerms,
   syncLearningCaptureSelection,
 } from "@/utils/learning-bridge"
 import { onMessage } from "@/utils/message"
@@ -16,5 +17,9 @@ export function setupLearningBridgeMessageHandlers() {
 
   onMessage("flushLearningBridgeQueue", async () => {
     return await flushLearningBridgeQueue()
+  })
+
+  onMessage("getLearningProjectionTerms", async (message) => {
+    return await getLearningProjectionTerms(message.data.terms)
   })
 }

@@ -17,6 +17,7 @@ const equalsMock = vi.fn(() => ({
 const whereMock = vi.fn(() => ({
   equals: equalsMock,
 }))
+const sendMessageMock = vi.fn()
 
 vi.mock("@/utils/db/dexie/db", () => ({
   db: {
@@ -26,10 +27,15 @@ vi.mock("@/utils/db/dexie/db", () => ({
   },
 }))
 
+vi.mock("@/utils/message", () => ({
+  sendMessage: sendMessageMock,
+}))
+
 describe("selective learning translation", () => {
   beforeEach(() => {
     mockRows.length = 0
     vi.clearAllMocks()
+    sendMessageMock.mockRejectedValue(new Error("bridge unavailable"))
   })
 
   it("summarizes dictionary words when learning mode has no mastered match", async () => {
@@ -71,5 +77,62 @@ describe("selective learning translation", () => {
     const summary = await buildLearningTranslationSummary("workflow ability", 6)
 
     expect(summary).toBe("")
+  })
+
+  it("uses daemon projection entries and skips mature terms", async () => {
+    sendMessageMock.mockResolvedValue({
+      status: "ok",
+      projectionVersion: "projection-1",
+      entries: [
+        {
+          normalizedText: "workflow",
+          kind: "word",
+          status: "mature",
+          confidence: 0.98,
+          definition: "daemon workflow",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+        {
+          normalizedText: "constraint",
+          kind: "word",
+          status: "review",
+          confidence: 0.62,
+          definition: "daemon constraint",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    })
+    const { buildLearningTranslationSummary } = await import("../selective-translation")
+
+    const summary = await buildLearningTranslationSummary("The workflow has a constraint.", 6)
+
+    expect(summary).not.toContain("workflow")
+    expect(summary).toContain("constraint: daemon constraint")
+    expect(sendMessageMock).toHaveBeenCalledWith("getLearningProjectionTerms", {
+      terms: expect.arrayContaining(["workflow", "constraint"]),
+    })
+  })
+
+  it("lets daemon projection override stale local mastered state", async () => {
+    mockRows.push({ id: "1", kind: "word", normalizedText: "workflow", status: "mastered" })
+    sendMessageMock.mockResolvedValue({
+      status: "ok",
+      projectionVersion: "projection-1",
+      entries: [
+        {
+          normalizedText: "workflow",
+          kind: "word",
+          status: "review",
+          confidence: 0.62,
+          definition: "daemon workflow",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    })
+    const { buildLearningTranslationSummary } = await import("../selective-translation")
+
+    const summary = await buildLearningTranslationSummary("workflow", 6)
+
+    expect(summary).toBe("workflow: daemon workflow")
   })
 })

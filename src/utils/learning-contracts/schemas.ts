@@ -3,6 +3,7 @@ import { z } from "zod"
 export const LEARNING_CONTRACT_VERSION = 1
 export const LEARNING_DAEMON_SERVICE = "read-frog-learning-daemon"
 export const LEARNING_DAEMON_DEFAULT_BASE_URL = "http://127.0.0.1:7457"
+export const MAX_MASTERY_PROJECTION_TERMS = 200
 
 export const learningItemKindSchema = z.enum(["word", "phrase", "sentence", "paragraph"])
 
@@ -74,6 +75,10 @@ export const masteryProjectionResponseSchema = z.object({
   entries: z.array(masteryProjectionEntrySchema),
 })
 
+export const masteryProjectionTermsRequestSchema = z.object({
+  terms: z.array(z.string().trim().min(1)).min(1).max(MAX_MASTERY_PROJECTION_TERMS),
+})
+
 export type LearningItemKindWire = z.infer<typeof learningItemKindSchema>
 export type LearningProjectionStatus = z.infer<typeof learningProjectionStatusSchema>
 export type LearningExplanationWire = z.infer<typeof learningExplanationWireSchema>
@@ -84,3 +89,4 @@ export type LearningCaptureSelectionResponse = z.infer<typeof learningCaptureSel
 export type LearningDaemonHealthResponse = z.infer<typeof learningDaemonHealthResponseSchema>
 export type MasteryProjectionEntry = z.infer<typeof masteryProjectionEntrySchema>
 export type MasteryProjectionResponse = z.infer<typeof masteryProjectionResponseSchema>
+export type MasteryProjectionTermsRequest = z.infer<typeof masteryProjectionTermsRequestSchema>

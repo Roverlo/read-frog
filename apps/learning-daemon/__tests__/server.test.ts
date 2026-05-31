@@ -107,6 +107,44 @@ describe("learning daemon server", () => {
     })
   })
 
+  it("filters mastery projection by requested terms", async () => {
+    await fetch(`${baseUrl}/api/v1/capture/selection`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: new Blob([JSON.stringify({
+        id: "capture-terms",
+        text: "repeatable workflow",
+        createdAt: "2026-06-01T00:00:00.000Z",
+        extractedItems: [
+          {
+            text: "workflow",
+            kind: "word",
+            explanation: { meaningZh: "工作流" },
+          },
+          {
+            text: "ability",
+            kind: "word",
+            explanation: { meaningZh: "能力" },
+          },
+        ],
+      })]),
+    })
+
+    const projectionResponse = await fetch(`${baseUrl}/api/v1/projection/terms?terms=workflow,missing`)
+    await expect(projectionResponse.json()).resolves.toMatchObject({
+      ok: true,
+      projectionVersion: "projection-1",
+      entries: [
+        {
+          normalizedText: "workflow",
+          kind: "word",
+          status: "learning",
+          definition: "工作流",
+        },
+      ],
+    })
+  })
+
   it("answers extension preflight requests with a matching CORS origin", async () => {
     const response = await fetch(`${baseUrl}/api/v1/capture/selection`, {
       method: "OPTIONS",

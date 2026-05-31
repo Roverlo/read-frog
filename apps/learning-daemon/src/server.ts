@@ -14,7 +14,9 @@ import {
   learningCaptureSelectionResponseSchema,
   learningDaemonHealthResponseSchema,
   masteryProjectionResponseSchema,
+  masteryProjectionTermsRequestSchema,
 } from "../../../src/utils/learning-contracts/schemas.ts"
+import { normalizeLearningDaemonText } from "./store.ts"
 
 export interface LearningDaemonServerOptions {
   store: LearningDaemonStore
@@ -84,8 +86,8 @@ async function readJsonBody<T>(
   return JSON.parse(Buffer.concat(chunks).toString("utf8")) as T
 }
 
-function getRequestPath(request: IncomingMessage) {
-  return new URL(request.url ?? "/", "http://127.0.0.1").pathname
+function getRequestUrl(request: IncomingMessage) {
+  return new URL(request.url ?? "/", "http://127.0.0.1")
 }
 
 async function handleHealth(store: LearningDaemonStore, response: ServerResponse) {
@@ -107,6 +109,27 @@ async function handleProjection(store: LearningDaemonStore, response: ServerResp
     projectionVersion: state.projectionVersion,
     eventId: state.eventId,
     entries: state.entries,
+  })
+  sendJson(response, 200, body)
+}
+
+async function handleProjectionTerms(
+  store: LearningDaemonStore,
+  url: URL,
+  response: ServerResponse,
+) {
+  const terms = url.searchParams.getAll("terms")
+    .flatMap(value => value.split(","))
+    .map(term => term.trim())
+    .filter(Boolean)
+  const request = masteryProjectionTermsRequestSchema.parse({ terms })
+  const normalizedTerms = new Set(request.terms.map(normalizeLearningDaemonText))
+  const state = await store.getState()
+  const body: MasteryProjectionResponse = masteryProjectionResponseSchema.parse({
+    ok: true,
+    projectionVersion: state.projectionVersion,
+    eventId: state.eventId,
+    entries: state.entries.filter(entry => normalizedTerms.has(entry.normalizedText)),
   })
   sendJson(response, 200, body)
 }
@@ -142,7 +165,8 @@ export function createLearningDaemonServer(options: LearningDaemonServerOptions)
         return
       }
 
-      const path = getRequestPath(request)
+      const url = getRequestUrl(request)
+      const path = url.pathname
 
       if (request.method === "GET" && path === "/api/v1/health") {
         await handleHealth(options.store, response)
@@ -151,6 +175,11 @@ export function createLearningDaemonServer(options: LearningDaemonServerOptions)
 
       if (request.method === "GET" && path === "/api/v1/projection") {
         await handleProjection(options.store, response)
+        return
+      }
+
+      if (request.method === "GET" && path === "/api/v1/projection/terms") {
+        await handleProjectionTerms(options.store, url, response)
         return
       }
 
