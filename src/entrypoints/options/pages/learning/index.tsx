@@ -25,6 +25,8 @@ import { extractLearningChildren, generateLearningExplanation, generateReviewMat
 import { exportLearningData, mergeLearningData } from "@/utils/learning/export"
 import { createPrivateLearningDataRepo, getGithubLearningSyncConfig, pollGithubDeviceToken, requestGithubDeviceCode, saveGithubLearningSyncConfig, syncLearningDataToGithub } from "@/utils/learning/github-sync"
 import { getLearningStats, markLearningItemReviewRating, upsertLearningItem } from "@/utils/learning/items"
+import { getQwertyChapterCount, getQwertyChapterWords, getQwertyDictResource, getWordMeaning, loadQwertyWords, QWERTY_CHAPTER_LENGTH, QWERTY_DICT_RESOURCES, scoreTypingInput } from "@/utils/learning/qwerty-dicts"
+import { getQwertyTypingStats, saveQwertyTypingResult } from "@/utils/learning/qwerty-typing"
 import { getLearningSettings, saveLearningSettings } from "@/utils/learning/settings"
 import { createVocabQuestions, estimateVocabularySize, summarizeWeakLevels } from "@/utils/learning/vocab-test"
 import { cn } from "@/utils/styles/utils"
@@ -692,6 +694,282 @@ function ReviewPanel({
   )
 }
 
+function QwertyTypingPanel({ onChanged }: { onChanged: () => void }) {
+  const [dictId, setDictId] = useState(QWERTY_DICT_RESOURCES[0]!.id)
+  const dict = useMemo(() => getQwertyDictResource(dictId), [dictId])
+  const [chapterIndex, setChapterIndex] = useState(0)
+  const [words, setWords] = useState<Awaited<ReturnType<typeof loadQwertyWords>>>([])
+  const [wordCursor, setWordCursor] = useState(0)
+  const [typedText, setTypedText] = useState("")
+  const [startedAt, setStartedAt] = useState<number | null>(null)
+  const [lastResult, setLastResult] = useState<ReturnType<typeof scoreTypingInput> | null>(null)
+  const [stats, setStats] = useState<Awaited<ReturnType<typeof getQwertyTypingStats>> | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+
+  const chapterCount = getQwertyChapterCount(dict)
+  const chapterWords = useMemo(() => getQwertyChapterWords(words, chapterIndex), [chapterIndex, words])
+  const currentWord = chapterWords[wordCursor]
+  const progressValue = chapterWords.length === 0
+    ? 0
+    : (Math.min(wordCursor + 1, chapterWords.length) / chapterWords.length) * 100
+
+  const refreshStats = useCallback(async () => {
+    setStats(await getQwertyTypingStats())
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    setIsLoading(true)
+    setLastResult(null)
+    setTypedText("")
+    setStartedAt(null)
+    setWordCursor(0)
+    void loadQwertyWords(dict)
+      .then((loadedWords) => {
+        if (!cancelled) {
+          setWords(loadedWords)
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setWords([])
+          toast.error("词库加载失败", {
+            description: error instanceof Error ? error.message : undefined,
+          })
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [dict])
+
+  useEffect(() => {
+    void refreshStats()
+  }, [refreshStats])
+
+  useEffect(() => {
+    if (chapterIndex >= chapterCount) {
+      setChapterIndex(0)
+    }
+  }, [chapterCount, chapterIndex])
+
+  useEffect(() => {
+    setWordCursor(0)
+    setTypedText("")
+    setStartedAt(null)
+    setLastResult(null)
+  }, [chapterIndex, dictId])
+
+  const submit = async () => {
+    if (!currentWord || !typedText.trim()) {
+      return
+    }
+
+    const result = scoreTypingInput(currentWord.name, typedText, { ignoreCase: true })
+    const durationMs = startedAt ? Date.now() - startedAt : 0
+    setLastResult(result)
+    setIsSaving(true)
+    try {
+      await saveQwertyTypingResult({
+        dict,
+        word: currentWord,
+        typedText,
+        result,
+        chapterIndex,
+        durationMs,
+      })
+      await refreshStats()
+      onChanged()
+      toast.success(result.correct ? "输入正确，已同步到学习进度" : "已记录错词并安排复习")
+      setTypedText("")
+      setStartedAt(null)
+      setWordCursor(cursor => Math.min(cursor + 1, Math.max(chapterWords.length - 1, 0)))
+    }
+    catch (error) {
+      toast.error("练习记录保存失败", {
+        description: error instanceof Error ? error.message : undefined,
+      })
+    }
+    finally {
+      setIsSaving(false)
+    }
+  }
+
+  const restartChapter = () => {
+    setWordCursor(0)
+    setTypedText("")
+    setStartedAt(null)
+    setLastResult(null)
+  }
+
+  const nextWord = () => {
+    setWordCursor(cursor => Math.min(cursor + 1, Math.max(chapterWords.length - 1, 0)))
+    setTypedText("")
+    setStartedAt(null)
+    setLastResult(null)
+  }
+
+  const prevWord = () => {
+    setWordCursor(cursor => Math.max(cursor - 1, 0))
+    setTypedText("")
+    setStartedAt(null)
+    setLastResult(null)
+  }
+
+  return (
+    <Card className="rounded-lg">
+      <CardHeader>
+        <CardTitle>Qwerty 键盘练习</CardTitle>
+        <CardDescription>精选 qwerty-learner 词库，练打字肌肉记忆，并写入陪读蛙学习进度。</CardDescription>
+        <CardAction>
+          <Button type="button" size="sm" variant="outline" onClick={restartChapter}>
+            <Icon icon="tabler:rotate-clockwise" />
+            重来
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_160px]">
+          <Select value={dictId} onValueChange={value => setDictId(String(value))}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {QWERTY_DICT_RESOURCES.map(resource => (
+                <SelectItem key={resource.id} value={resource.id}>
+                  {resource.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={String(chapterIndex)} onValueChange={value => setChapterIndex(Number(value) || 0)}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Array.from({ length: chapterCount }, (_, index) => (
+                <SelectItem key={index} value={String(index)}>
+                  第
+                  {index + 1}
+                  章
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-4">
+          <StatTile label="练习次数" value={stats?.total ?? 0} tone="ink" icon="tabler:keyboard" />
+          <StatTile label="正确" value={stats?.correct ?? 0} tone="olive" icon="tabler:checks" />
+          <StatTile label="平均准确率" value={`${stats?.averageAccuracy ?? 0}%`} tone="mustard" icon="tabler:percentage" />
+          <StatTile label="平均耗时" value={`${Math.round((stats?.averageDurationMs ?? 0) / 1000)}s`} tone="coral" icon="tabler:clock" />
+        </div>
+
+        <Progress value={progressValue}>
+          <ProgressLabel>
+            {dict.name}
+            {" "}
+            第
+            {chapterIndex + 1}
+            章
+          </ProgressLabel>
+          <ProgressValue>{() => `${Math.min(wordCursor + 1, chapterWords.length || 1)}/${chapterWords.length || QWERTY_CHAPTER_LENGTH}`}</ProgressValue>
+        </Progress>
+
+        {isLoading
+          ? <div className="rounded-lg border p-6 text-sm text-muted-foreground">词库加载中...</div>
+          : !currentWord
+              ? (
+                  <Empty className="border">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <Icon icon="tabler:book-off" />
+                      </EmptyMedia>
+                      <EmptyTitle>本章没有词条</EmptyTitle>
+                      <EmptyDescription>换一个章节或词库再试。</EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                )
+              : (
+                  <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="break-words text-4xl font-semibold leading-tight tracking-normal">{currentWord.name}</div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                          {currentWord.usphone && <Badge variant="outline">US {currentWord.usphone}</Badge>}
+                          {currentWord.ukphone && <Badge variant="outline">UK {currentWord.ukphone}</Badge>}
+                          <Badge variant="secondary">{dict.category}</Badge>
+                        </div>
+                      </div>
+                      <div className="text-right text-sm text-muted-foreground">
+                        #{currentWord.index + 1}
+                      </div>
+                    </div>
+                    <p className="text-sm leading-6 text-muted-foreground">{getWordMeaning(currentWord) || "暂无释义"}</p>
+                    <form
+                      className="grid gap-2"
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        void submit()
+                      }}
+                    >
+                      <Input
+                        value={typedText}
+                        onChange={(event) => {
+                          setTypedText(event.target.value)
+                          setStartedAt(current => current ?? Date.now())
+                        }}
+                        placeholder="输入上方英文，回车提交"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                      />
+                      {lastResult && (
+                        <div className={cn("rounded-lg border p-3 text-sm", lastResult.correct ? "border-[#6e7448]/35 bg-[#6e7448]/10 text-[#3f4424]" : "border-[#ed6f5c]/30 bg-[#ed6f5c]/10 text-[#8c3328]")}>
+                          {lastResult.correct
+                            ? "上一题正确。"
+                            : (
+                                <>
+                                  上一题准确率
+                                  {" "}
+                                  {lastResult.accuracy}
+                                  %，错误位置：
+                                  {" "}
+                                  {lastResult.mistakes.slice(0, 4).map(mistake => `${mistake.index + 1}:${mistake.actual || "空"}→${mistake.expected || "空"}`).join(" / ")}
+                                </>
+                              )}
+                        </div>
+                      )}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex gap-2">
+                          <Button type="button" variant="outline" size="sm" disabled={wordCursor === 0} onClick={prevWord}>
+                            <Icon icon="tabler:arrow-left" />
+                            上一个
+                          </Button>
+                          <Button type="button" variant="outline" size="sm" disabled={wordCursor >= chapterWords.length - 1} onClick={nextWord}>
+                            下一个
+                            <Icon icon="tabler:arrow-right" />
+                          </Button>
+                        </div>
+                        <Button type="submit" disabled={!typedText.trim() || isSaving}>
+                          {isSaving ? "保存中..." : "提交"}
+                        </Button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+      </CardContent>
+    </Card>
+  )
+}
+
 function LibraryPanel({
   items,
   selectedId,
@@ -914,6 +1192,7 @@ export function LearningPage() {
                   onChanged={refresh}
                 />
                 <VocabTestPanel providerConfig={providerConfig} onChanged={refresh} />
+                <QwertyTypingPanel onChanged={refresh} />
                 <LibraryPanel
                   items={items}
                   selectedId={selectedId}

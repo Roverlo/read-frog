@@ -69,6 +69,29 @@ export interface LearningReviewLog {
   updatedAt: Date
 }
 
+export interface QwertyTypingMistakeLog {
+  expected: string
+  actual: string
+  index: number
+}
+
+export interface QwertyTypingRecord {
+  id: string
+  itemId: string
+  dictId: string
+  dictName: string
+  chapterIndex: number
+  wordIndex: number
+  word: string
+  input: string
+  correct: boolean
+  accuracy: number
+  durationMs: number
+  mistakes: QwertyTypingMistakeLog[]
+  createdAt: Date
+  updatedAt: Date
+}
+
 export interface LearningSettings {
   id: string
   desiredRetention: number
