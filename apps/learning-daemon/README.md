@@ -20,6 +20,8 @@ Open the first daemon-hosted workspace at:
 http://127.0.0.1:7457/
 ```
 
+The workspace shell is served from `apps/learning-daemon/workspace/index.html`. The daemon TypeScript layer should stay focused on HTTP APIs and static asset delivery so the workspace can later move into a standalone Vite app without changing extension bridge contracts.
+
 Useful environment variables:
 
 - `READFROG_LEARNING_HOST`: bind host, default `127.0.0.1`.

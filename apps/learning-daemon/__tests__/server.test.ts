@@ -61,7 +61,9 @@ describe("learning daemon server", () => {
 
     expect(response.status).toBe(200)
     expect(response.headers.get("content-type")).toContain("text/html")
-    await expect(response.text()).resolves.toContain("data-readfrog-learning-workspace")
+    const html = await response.text()
+    expect(html).toContain("data-readfrog-learning-workspace")
+    expect(html).toContain("/api/v1/workspace/state")
   })
 
   it("stores selection captures and exposes a mastery projection", async () => {

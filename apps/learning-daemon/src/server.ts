@@ -28,7 +28,7 @@ import {
   readQwertyDictionaryRawJson,
 } from "./qwerty-dictionaries.ts"
 import { normalizeLearningDaemonText } from "./store.ts"
-import { LEARNING_WORKSPACE_HTML } from "./workspace.ts"
+import { readLearningWorkspaceHtml } from "./workspace.ts"
 
 export interface LearningDaemonServerOptions {
   store: LearningDaemonStore
@@ -250,7 +250,7 @@ export function createLearningDaemonServer(options: LearningDaemonServerOptions)
       const path = url.pathname
 
       if (request.method === "GET" && (path === "/" || path === "/workspace")) {
-        sendHtml(response, 200, LEARNING_WORKSPACE_HTML)
+        sendHtml(response, 200, await readLearningWorkspaceHtml())
         return
       }
 
