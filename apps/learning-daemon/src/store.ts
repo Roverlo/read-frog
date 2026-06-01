@@ -1,5 +1,6 @@
 import type {
   LearningCaptureSelectionRequest,
+  LearningQwertyWordRecordRequest,
   MasteryProjectionEntry,
 } from "../../../src/utils/learning-contracts/schemas.ts"
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
@@ -10,6 +11,7 @@ export interface LearningDaemonStoreState {
   projectionVersion: string
   eventId?: string
   captures: LearningCaptureSelectionRequest[]
+  qwertyWordRecords: LearningQwertyWordRecordRequest[]
   entries: MasteryProjectionEntry[]
 }
 
@@ -18,9 +20,16 @@ export interface CaptureSelectionResult {
   projectionVersion: string
 }
 
+export interface RecordQwertyWordResult {
+  itemId: string
+  projectionVersion: string
+  entry: MasteryProjectionEntry
+}
+
 export interface LearningDaemonStore {
   getState: () => Promise<LearningDaemonStoreState>
   captureSelection: (capture: LearningCaptureSelectionRequest) => Promise<CaptureSelectionResult>
+  recordQwertyWord: (record: LearningQwertyWordRecordRequest) => Promise<RecordQwertyWordResult>
 }
 
 export function normalizeLearningDaemonText(text: string) {
@@ -36,6 +45,7 @@ function createInitialState(): LearningDaemonStoreState {
     sequence: 0,
     projectionVersion: "projection-0",
     captures: [],
+    qwertyWordRecords: [],
     entries: [],
   }
 }
@@ -81,6 +91,8 @@ function createProjectionEntry(input: {
   text: string
   kind: MasteryProjectionEntry["kind"]
   definition?: string
+  status?: MasteryProjectionEntry["status"]
+  confidence?: number
   updatedAt: string
 }): MasteryProjectionEntry | undefined {
   const normalizedText = normalizeLearningDaemonText(input.text)
@@ -91,8 +103,8 @@ function createProjectionEntry(input: {
   return {
     normalizedText,
     kind: input.kind,
-    status: "learning",
-    confidence: 0.35,
+    status: input.status ?? "learning",
+    confidence: input.confidence ?? 0.35,
     definition: input.definition,
     updatedAt: input.updatedAt,
   }
@@ -123,6 +135,23 @@ function projectionEntriesFromCapture(capture: LearningCaptureSelectionRequest):
   }
 
   return entries
+}
+
+function createProjectionEntryFromQwertyRecord(
+  record: LearningQwertyWordRecordRequest,
+): MasteryProjectionEntry | undefined {
+  const accuracyConfidence = Math.max(0.05, Math.min(0.95, record.accuracy))
+  const confidence = record.correct
+    ? Math.max(0.55, accuracyConfidence)
+    : Math.min(0.45, accuracyConfidence)
+  return createProjectionEntry({
+    text: record.word,
+    kind: "word",
+    definition: record.definition,
+    status: record.correct && record.accuracy >= 0.92 ? "review" : "learning",
+    confidence,
+    updatedAt: record.createdAt ?? new Date().toISOString(),
+  })
 }
 
 export function createFileLearningDaemonStore(dataDir: string): LearningDaemonStore {
@@ -157,6 +186,35 @@ export function createFileLearningDaemonStore(dataDir: string): LearningDaemonSt
       })
 
       return { itemIds, projectionVersion }
+    },
+
+    async recordQwertyWord(record) {
+      const state = await readState(filePath)
+      const sequence = state.sequence + 1
+      const projectionVersion = `projection-${sequence}`
+      const eventId = `event-${sequence}`
+      const createdAt = record.createdAt ?? new Date().toISOString()
+      const recordWithCreatedAt = {
+        ...record,
+        createdAt,
+      }
+      const entry = createProjectionEntryFromQwertyRecord(recordWithCreatedAt)
+      if (!entry) {
+        throw new Error("Qwerty word record text is empty")
+      }
+      const entries = upsertProjectionEntry(state.entries, entry)
+      const itemId = record.id ?? `${entry.normalizedText}:qwerty:${sequence}`
+
+      await writeState(filePath, {
+        ...state,
+        sequence,
+        projectionVersion,
+        eventId,
+        qwertyWordRecords: [...state.qwertyWordRecords, recordWithCreatedAt],
+        entries,
+      })
+
+      return { itemId, projectionVersion, entry }
     },
   }
 }

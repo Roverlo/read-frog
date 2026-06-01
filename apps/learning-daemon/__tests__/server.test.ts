@@ -56,6 +56,14 @@ describe("learning daemon server", () => {
     })
   })
 
+  it("serves the daemon-hosted learning workspace", async () => {
+    const response = await fetch(`${baseUrl}/`)
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("content-type")).toContain("text/html")
+    await expect(response.text()).resolves.toContain("data-readfrog-learning-workspace")
+  })
+
   it("stores selection captures and exposes a mastery projection", async () => {
     const captureResponse = await fetch(`${baseUrl}/api/v1/capture/selection`, {
       method: "POST",
@@ -102,6 +110,51 @@ describe("learning daemon server", () => {
           status: "learning",
           confidence: 0.35,
           definition: "工作流",
+        },
+      ],
+    })
+  })
+
+  it("records qwerty word practice and updates the mastery projection", async () => {
+    const recordResponse = await fetch(`${baseUrl}/api/v1/qwerty/records/word`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: new Blob([JSON.stringify({
+        word: "workflow",
+        input: "workflow",
+        correct: true,
+        accuracy: 1,
+        durationMs: 1234,
+        definition: "work process",
+        createdAt: "2026-06-01T00:00:00.000Z",
+      })]),
+    })
+
+    await expect(recordResponse.json()).resolves.toMatchObject({
+      ok: true,
+      itemId: "workflow:qwerty:1",
+      projectionVersion: "projection-1",
+      entry: {
+        normalizedText: "workflow",
+        kind: "word",
+        status: "review",
+        confidence: 0.95,
+        definition: "work process",
+      },
+    })
+
+    const projectionResponse = await fetch(`${baseUrl}/api/v1/projection`)
+    await expect(projectionResponse.json()).resolves.toMatchObject({
+      ok: true,
+      projectionVersion: "projection-1",
+      eventId: "event-1",
+      entries: [
+        {
+          normalizedText: "workflow",
+          kind: "word",
+          status: "review",
+          confidence: 0.95,
+          definition: "work process",
         },
       ],
     })

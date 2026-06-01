@@ -14,6 +14,12 @@ Default endpoint:
 http://127.0.0.1:7457
 ```
 
+Open the first daemon-hosted workspace at:
+
+```text
+http://127.0.0.1:7457/
+```
+
 Useful environment variables:
 
 - `READFROG_LEARNING_HOST`: bind host, default `127.0.0.1`.
@@ -25,9 +31,13 @@ Useful environment variables:
 
 - `GET /api/v1/health`
 - `GET /api/v1/projection`
+- `GET /api/v1/projection/terms?terms=workflow,ability`
 - `POST /api/v1/capture/selection`
+- `POST /api/v1/qwerty/records/word`
 
 The daemon currently persists JSON state to `learning-daemon-state.json`. This is intentionally small; the next milestone can replace the store with SQLite without changing the extension bridge contract.
+
+`POST /api/v1/qwerty/records/word` records qwerty-style typing practice and updates the mastery projection used by selective translation. Correct high-accuracy records move words into `review`; missed or low-accuracy records stay in `learning`.
 
 ## Container
 

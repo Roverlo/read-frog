@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type {
   LearningCaptureSelectionRequest,
   LearningDaemonHealthResponse,
+  LearningQwertyWordRecordRequest,
   MasteryProjectionResponse,
 } from "../../../src/utils/learning-contracts/schemas.ts"
 import type { LearningDaemonStore } from "./store.ts"
@@ -13,10 +14,13 @@ import {
   learningCaptureSelectionRequestSchema,
   learningCaptureSelectionResponseSchema,
   learningDaemonHealthResponseSchema,
+  learningQwertyWordRecordRequestSchema,
+  learningQwertyWordRecordResponseSchema,
   masteryProjectionResponseSchema,
   masteryProjectionTermsRequestSchema,
 } from "../../../src/utils/learning-contracts/schemas.ts"
 import { normalizeLearningDaemonText } from "./store.ts"
+import { LEARNING_WORKSPACE_HTML } from "./workspace.ts"
 
 export interface LearningDaemonServerOptions {
   store: LearningDaemonStore
@@ -58,6 +62,12 @@ function sendJson(response: ServerResponse, statusCode: number, body: unknown) {
   response.statusCode = statusCode
   response.setHeader("content-type", "application/json; charset=utf-8")
   response.end(`${JSON.stringify(body)}\n`)
+}
+
+function sendHtml(response: ServerResponse, statusCode: number, body: string) {
+  response.statusCode = statusCode
+  response.setHeader("content-type", "text/html; charset=utf-8")
+  response.end(body)
 }
 
 function sendError(response: ServerResponse, statusCode: number, message: string) {
@@ -151,6 +161,24 @@ async function handleCaptureSelection(
   }))
 }
 
+async function handleQwertyWordRecord(
+  request: IncomingMessage,
+  response: ServerResponse,
+  store: LearningDaemonStore,
+  maxBodyBytes: number,
+) {
+  const record: LearningQwertyWordRecordRequest = learningQwertyWordRecordRequestSchema.parse(
+    await readJsonBody(request, maxBodyBytes),
+  )
+  const result = await store.recordQwertyWord(record)
+  sendJson(response, 200, learningQwertyWordRecordResponseSchema.parse({
+    ok: true,
+    itemId: result.itemId,
+    projectionVersion: result.projectionVersion,
+    entry: result.entry,
+  }))
+}
+
 export function createLearningDaemonServer(options: LearningDaemonServerOptions) {
   const allowedOrigins = options.allowedOrigins ?? DEFAULT_ALLOWED_ORIGINS
   const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES
@@ -167,6 +195,11 @@ export function createLearningDaemonServer(options: LearningDaemonServerOptions)
 
       const url = getRequestUrl(request)
       const path = url.pathname
+
+      if (request.method === "GET" && (path === "/" || path === "/workspace")) {
+        sendHtml(response, 200, LEARNING_WORKSPACE_HTML)
+        return
+      }
 
       if (request.method === "GET" && path === "/api/v1/health") {
         await handleHealth(options.store, response)
@@ -185,6 +218,11 @@ export function createLearningDaemonServer(options: LearningDaemonServerOptions)
 
       if (request.method === "POST" && path === "/api/v1/capture/selection") {
         await handleCaptureSelection(request, response, options.store, maxBodyBytes)
+        return
+      }
+
+      if (request.method === "POST" && path === "/api/v1/qwerty/records/word") {
+        await handleQwertyWordRecord(request, response, options.store, maxBodyBytes)
         return
       }
 

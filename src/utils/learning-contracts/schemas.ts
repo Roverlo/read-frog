@@ -68,11 +68,40 @@ export const masteryProjectionEntrySchema = z.object({
   updatedAt: z.string().datetime(),
 })
 
+export const learningQwertyMistakeSchema = z.object({
+  expected: z.string(),
+  actual: z.string(),
+  index: z.number().int().min(0),
+})
+
+export const learningQwertyWordRecordRequestSchema = z.object({
+  id: z.string().trim().min(1).optional(),
+  word: z.string().trim().min(1),
+  input: z.string().default(""),
+  correct: z.boolean(),
+  accuracy: z.number().min(0).max(1),
+  durationMs: z.number().int().nonnegative(),
+  dictId: z.string().trim().min(1).optional(),
+  dictName: z.string().trim().min(1).optional(),
+  chapterIndex: z.number().int().nonnegative().optional(),
+  wordIndex: z.number().int().nonnegative().optional(),
+  definition: z.string().optional(),
+  mistakes: z.array(learningQwertyMistakeSchema).default([]),
+  createdAt: z.string().datetime().optional(),
+})
+
 export const masteryProjectionResponseSchema = z.object({
   ok: z.literal(true),
   projectionVersion: z.string(),
   eventId: z.string().optional(),
   entries: z.array(masteryProjectionEntrySchema),
+})
+
+export const learningQwertyWordRecordResponseSchema = z.object({
+  ok: z.literal(true),
+  itemId: z.string(),
+  projectionVersion: z.string(),
+  entry: masteryProjectionEntrySchema,
 })
 
 export const masteryProjectionTermsRequestSchema = z.object({
@@ -87,6 +116,9 @@ export type LearningCaptureSelectionInput = z.input<typeof learningCaptureSelect
 export type LearningCaptureSelectionRequest = z.infer<typeof learningCaptureSelectionRequestSchema>
 export type LearningCaptureSelectionResponse = z.infer<typeof learningCaptureSelectionResponseSchema>
 export type LearningDaemonHealthResponse = z.infer<typeof learningDaemonHealthResponseSchema>
+export type LearningQwertyMistake = z.infer<typeof learningQwertyMistakeSchema>
+export type LearningQwertyWordRecordRequest = z.infer<typeof learningQwertyWordRecordRequestSchema>
+export type LearningQwertyWordRecordResponse = z.infer<typeof learningQwertyWordRecordResponseSchema>
 export type MasteryProjectionEntry = z.infer<typeof masteryProjectionEntrySchema>
 export type MasteryProjectionResponse = z.infer<typeof masteryProjectionResponseSchema>
 export type MasteryProjectionTermsRequest = z.infer<typeof masteryProjectionTermsRequestSchema>
