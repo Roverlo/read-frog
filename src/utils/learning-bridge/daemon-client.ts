@@ -7,6 +7,7 @@ import type {
   LearningQwertyDictionaryChapterResponse,
   LearningQwertyWordRecordRequest,
   LearningQwertyWordRecordResponse,
+  LearningWorkspaceStateResponse,
   MasteryProjectionResponse,
 } from "@/utils/learning-contracts"
 import {
@@ -15,6 +16,7 @@ import {
   learningQwertyDictionariesResponseSchema,
   learningQwertyDictionaryChapterResponseSchema,
   learningQwertyWordRecordResponseSchema,
+  learningWorkspaceStateResponseSchema,
   masteryProjectionResponseSchema,
 } from "@/utils/learning-contracts"
 
@@ -107,6 +109,12 @@ export async function getLearningMasteryProjection(
 ): Promise<MasteryProjectionResponse> {
   const query = options.since ? `?since=${encodeURIComponent(options.since)}` : ""
   return requestJson(`/api/v1/projection${query}`, masteryProjectionResponseSchema, options)
+}
+
+export async function getLearningWorkspaceState(
+  options: LearningDaemonClientOptions,
+): Promise<LearningWorkspaceStateResponse> {
+  return requestJson("/api/v1/workspace/state", learningWorkspaceStateResponseSchema, options)
 }
 
 export async function getLearningMasteryProjectionTerms(

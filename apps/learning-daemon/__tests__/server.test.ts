@@ -115,6 +115,82 @@ describe("learning daemon server", () => {
     })
   })
 
+  it("serves workspace state with capture, qwerty, and mastery stats", async () => {
+    await fetch(`${baseUrl}/api/v1/capture/selection`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: new Blob([JSON.stringify({
+        id: "capture-state",
+        text: "repeatable workflow",
+        context: "A repeatable workflow helps teams improve.",
+        sourceTitle: "Workflow notes",
+        sourceUrl: "https://example.test/workflow",
+        createdAt: "2026-06-01T00:00:00.000Z",
+        extractedItems: [
+          {
+            text: "workflow",
+            kind: "word",
+            explanation: { meaningZh: "workflow definition" },
+          },
+        ],
+      })]),
+    })
+    await fetch(`${baseUrl}/api/v1/qwerty/records/word`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: new Blob([JSON.stringify({
+        id: "record-state",
+        word: "workflow",
+        input: "workflow",
+        correct: true,
+        accuracy: 1,
+        durationMs: 1200,
+        dictId: "cet4",
+        chapterIndex: 0,
+        wordIndex: 1,
+        mistakes: [],
+        createdAt: "2026-06-01T00:01:00.000Z",
+      })]),
+    })
+
+    const response = await fetch(`${baseUrl}/api/v1/workspace/state`)
+
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      projectionVersion: "projection-2",
+      stats: {
+        captureCount: 1,
+        qwertyRecordCount: 1,
+        correctQwertyRecordCount: 1,
+        projectionEntryCount: 2,
+        averageAccuracy: 1,
+      },
+      captures: [
+        {
+          id: "capture-state",
+          text: "repeatable workflow",
+          sourceTitle: "Workflow notes",
+          sourceUrl: "https://example.test/workflow",
+          extractedCount: 1,
+        },
+      ],
+      qwertyWordRecords: [
+        {
+          id: "record-state",
+          word: "workflow",
+          input: "workflow",
+          correct: true,
+          accuracy: 1,
+          durationMs: 1200,
+          dictId: "cet4",
+          chapterIndex: 0,
+          wordIndex: 1,
+          mistakeCount: 0,
+        },
+      ],
+    })
+  })
+
   it("serves qwerty dictionaries from the daemon asset directory", async () => {
     const dictionariesResponse = await fetch(`${baseUrl}/api/v1/qwerty/dictionaries`)
 
@@ -195,6 +271,43 @@ describe("learning daemon server", () => {
           kind: "word",
           status: "review",
           confidence: 0.95,
+          definition: "work process",
+        },
+      ],
+    })
+  })
+
+  it("promotes repeated high-accuracy qwerty practice into mature projection terms", async () => {
+    for (const createdAt of [
+      "2026-06-01T00:00:00.000Z",
+      "2026-06-01T00:01:00.000Z",
+      "2026-06-01T00:02:00.000Z",
+    ]) {
+      await fetch(`${baseUrl}/api/v1/qwerty/records/word`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: new Blob([JSON.stringify({
+          word: "workflow",
+          input: "workflow",
+          correct: true,
+          accuracy: 1,
+          durationMs: 1000,
+          definition: "work process",
+          createdAt,
+        })]),
+      })
+    }
+
+    const projectionResponse = await fetch(`${baseUrl}/api/v1/projection/terms?terms=workflow`)
+    await expect(projectionResponse.json()).resolves.toMatchObject({
+      ok: true,
+      projectionVersion: "projection-3",
+      entries: [
+        {
+          normalizedText: "workflow",
+          kind: "word",
+          status: "mature",
+          confidence: 0.99,
           definition: "work process",
         },
       ],

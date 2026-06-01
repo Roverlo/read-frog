@@ -137,6 +137,53 @@ export const learningQwertyDictionaryChapterResponseSchema = z.object({
   words: z.array(learningQwertyWordSchema),
 })
 
+export const learningWorkspaceCaptureSummarySchema = z.object({
+  id: z.string().trim().min(1),
+  text: z.string().trim().min(1),
+  context: z.string().optional(),
+  sourceUrl: z.string().optional(),
+  sourceTitle: z.string().optional(),
+  extractedCount: z.number().int().nonnegative(),
+  createdAt: z.string().datetime(),
+})
+
+export const learningWorkspaceQwertyRecordSummarySchema = z.object({
+  id: z.string().trim().min(1).optional(),
+  word: z.string().trim().min(1),
+  input: z.string(),
+  correct: z.boolean(),
+  accuracy: z.number().min(0).max(1),
+  durationMs: z.number().int().nonnegative(),
+  dictId: z.string().trim().min(1).optional(),
+  dictName: z.string().trim().min(1).optional(),
+  chapterIndex: z.number().int().nonnegative().optional(),
+  wordIndex: z.number().int().nonnegative().optional(),
+  mistakeCount: z.number().int().nonnegative(),
+  createdAt: z.string().datetime(),
+})
+
+export const learningWorkspaceStatsSchema = z.object({
+  captureCount: z.number().int().nonnegative(),
+  qwertyRecordCount: z.number().int().nonnegative(),
+  correctQwertyRecordCount: z.number().int().nonnegative(),
+  projectionEntryCount: z.number().int().nonnegative(),
+  unknownCount: z.number().int().nonnegative(),
+  learningCount: z.number().int().nonnegative(),
+  reviewCount: z.number().int().nonnegative(),
+  matureCount: z.number().int().nonnegative(),
+  archivedCount: z.number().int().nonnegative(),
+  averageAccuracy: z.number().min(0).max(1),
+})
+
+export const learningWorkspaceStateResponseSchema = z.object({
+  ok: z.literal(true),
+  projectionVersion: z.string(),
+  eventId: z.string().optional(),
+  stats: learningWorkspaceStatsSchema,
+  captures: z.array(learningWorkspaceCaptureSummarySchema),
+  qwertyWordRecords: z.array(learningWorkspaceQwertyRecordSummarySchema),
+})
+
 export const masteryProjectionTermsRequestSchema = z.object({
   terms: z.array(z.string().trim().min(1)).min(1).max(MAX_MASTERY_PROJECTION_TERMS),
 })
@@ -156,6 +203,10 @@ export type LearningQwertyDictionaryResource = z.infer<typeof learningQwertyDict
 export type LearningQwertyWord = z.infer<typeof learningQwertyWordSchema>
 export type LearningQwertyWordRecordRequest = z.infer<typeof learningQwertyWordRecordRequestSchema>
 export type LearningQwertyWordRecordResponse = z.infer<typeof learningQwertyWordRecordResponseSchema>
+export type LearningWorkspaceCaptureSummary = z.infer<typeof learningWorkspaceCaptureSummarySchema>
+export type LearningWorkspaceQwertyRecordSummary = z.infer<typeof learningWorkspaceQwertyRecordSummarySchema>
+export type LearningWorkspaceStateResponse = z.infer<typeof learningWorkspaceStateResponseSchema>
+export type LearningWorkspaceStats = z.infer<typeof learningWorkspaceStatsSchema>
 export type MasteryProjectionEntry = z.infer<typeof masteryProjectionEntrySchema>
 export type MasteryProjectionResponse = z.infer<typeof masteryProjectionResponseSchema>
 export type MasteryProjectionTermsRequest = z.infer<typeof masteryProjectionTermsRequestSchema>

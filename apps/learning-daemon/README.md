@@ -30,6 +30,7 @@ Useful environment variables:
 ## API
 
 - `GET /api/v1/health`
+- `GET /api/v1/workspace/state`
 - `GET /api/v1/projection`
 - `GET /api/v1/projection/terms?terms=workflow,ability`
 - `GET /api/v1/qwerty/dictionaries`
@@ -40,6 +41,9 @@ Useful environment variables:
 The daemon currently persists JSON state to `learning-daemon-state.json`. This is intentionally small; the next milestone can replace the store with SQLite without changing the extension bridge contract.
 
 `POST /api/v1/qwerty/records/word` records qwerty-style typing practice and updates the mastery projection used by selective translation. Correct high-accuracy records move words into `review`; missed or low-accuracy records stay in `learning`.
+After three consecutive high-accuracy correct records for the same word, the projection moves that word into `mature`, allowing the extension's selective translation mode to stop translating it.
+
+`GET /api/v1/workspace/state` returns daemon-owned workspace summaries: recent extension captures, recent qwerty word records, and mastery distribution stats. The workspace UI uses this endpoint instead of reconstructing state from the projection table.
 
 Qwerty dictionary assets are now daemon/container assets under `apps/learning-daemon/dicts/qwerty`. The extension uses the daemon API instead of packaging these large JSON dictionaries into `public/`.
 

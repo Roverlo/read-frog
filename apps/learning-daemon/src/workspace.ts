@@ -590,6 +590,7 @@ export const LEARNING_WORKSPACE_HTML = `<!doctype html>
     const state = {
       health: null,
       projection: { projectionVersion: "projection-0", entries: [] },
+      workspaceState: null,
       dictionaries: [],
       dictionaryWords: [],
       dictionaryId: null,
@@ -672,14 +673,11 @@ export const LEARNING_WORKSPACE_HTML = `<!doctype html>
     }
 
     function renderMetrics() {
-      const counts = state.projection.entries.reduce((result, entry) => {
-        result[entry.status] = (result[entry.status] ?? 0) + 1;
-        return result;
-      }, {});
-      setText("metric-learning", counts.learning ?? 0);
-      setText("metric-review", counts.review ?? 0);
-      setText("metric-mature", counts.mature ?? 0);
-      setText("metric-archived", counts.archived ?? 0);
+      const stats = state.workspaceState?.stats;
+      setText("metric-learning", stats?.learningCount ?? 0);
+      setText("metric-review", stats?.reviewCount ?? 0);
+      setText("metric-mature", stats?.matureCount ?? 0);
+      setText("metric-archived", stats?.archivedCount ?? 0);
       setText("version-pill", state.projection.projectionVersion);
     }
 
@@ -749,20 +747,35 @@ export const LEARNING_WORKSPACE_HTML = `<!doctype html>
 
     function renderContext() {
       const list = $("context-list");
-      const entries = sortEntries(state.projection.entries).slice(0, 8);
-      setText("inbox-count", entries.length + " items");
-      if (!entries.length) {
+      const captures = state.workspaceState?.captures ?? [];
+      const qwertyRecords = state.workspaceState?.qwertyWordRecords ?? [];
+      const items = [
+        ...captures.slice(0, 6).map((capture) => ({
+          title: capture.text,
+          detail: "capture"
+            + (capture.extractedCount ? " / " + capture.extractedCount + " extracted" : "")
+            + (capture.sourceTitle ? " / " + capture.sourceTitle : "")
+            + (capture.context ? " / " + capture.context : ""),
+        })),
+        ...qwertyRecords.slice(0, 6).map((record) => ({
+          title: record.word,
+          detail: "qwerty / " + (record.correct ? "correct" : "review")
+            + " / " + Math.round(record.accuracy * 100) + "%"
+            + " / " + Math.round(record.durationMs / 1000) + "s",
+        })),
+      ];
+      setText("inbox-count", captures.length + " captures");
+      if (!items.length) {
         list.replaceChildren(emptyContext("Selection captures will appear here after the extension syncs."));
         return;
       }
-      list.replaceChildren(...entries.map((entry) => {
+      list.replaceChildren(...items.map((entry) => {
         const item = document.createElement("div");
         item.className = "log";
         const title = document.createElement("strong");
-        title.textContent = entry.normalizedText;
+        title.textContent = entry.title;
         const detail = document.createElement("span");
-        detail.textContent = entry.status + ' / ' + Math.round(entry.confidence * 100) + '%'
-          + (entry.definition ? ' / ' + entry.definition : '');
+        detail.textContent = entry.detail;
         item.append(title, detail);
         return item;
       }));
@@ -778,13 +791,15 @@ export const LEARNING_WORKSPACE_HTML = `<!doctype html>
 
     async function refresh() {
       try {
-        const [healthResponse, projectionResponse, dictionariesResponse] = await Promise.all([
+        const [healthResponse, projectionResponse, workspaceResponse, dictionariesResponse] = await Promise.all([
           fetch("/api/v1/health"),
           fetch("/api/v1/projection"),
+          fetch("/api/v1/workspace/state"),
           fetch("/api/v1/qwerty/dictionaries"),
         ]);
         state.health = await healthResponse.json();
         state.projection = await projectionResponse.json();
+        state.workspaceState = await workspaceResponse.json();
         const dictionaries = await dictionariesResponse.json();
         state.dictionaries = dictionaries.dictionaries || [];
         if (!state.dictionaryId && state.dictionaries.length) {

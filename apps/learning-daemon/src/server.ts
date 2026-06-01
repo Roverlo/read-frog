@@ -18,6 +18,7 @@ import {
   learningQwertyDictionaryChapterResponseSchema,
   learningQwertyWordRecordRequestSchema,
   learningQwertyWordRecordResponseSchema,
+  learningWorkspaceStateResponseSchema,
   masteryProjectionResponseSchema,
   masteryProjectionTermsRequestSchema,
 } from "../../../src/utils/learning-contracts/schemas.ts"
@@ -134,6 +135,12 @@ async function handleProjection(store: LearningDaemonStore, response: ServerResp
     entries: state.entries,
   })
   sendJson(response, 200, body)
+}
+
+async function handleWorkspaceState(store: LearningDaemonStore, response: ServerResponse) {
+  sendJson(response, 200, learningWorkspaceStateResponseSchema.parse(
+    await store.getWorkspaceState(),
+  ))
 }
 
 async function handleProjectionTerms(
@@ -254,6 +261,11 @@ export function createLearningDaemonServer(options: LearningDaemonServerOptions)
 
       if (request.method === "GET" && path === "/api/v1/projection") {
         await handleProjection(options.store, response)
+        return
+      }
+
+      if (request.method === "GET" && path === "/api/v1/workspace/state") {
+        await handleWorkspaceState(options.store, response)
         return
       }
 

@@ -1,6 +1,8 @@
 import type {
   LearningCaptureSelectionRequest,
   LearningQwertyWordRecordRequest,
+  LearningWorkspaceStateResponse,
+  LearningWorkspaceStats,
   MasteryProjectionEntry,
 } from "../../../src/utils/learning-contracts/schemas.ts"
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
@@ -28,6 +30,7 @@ export interface RecordQwertyWordResult {
 
 export interface LearningDaemonStore {
   getState: () => Promise<LearningDaemonStoreState>
+  getWorkspaceState: () => Promise<LearningWorkspaceStateResponse>
   captureSelection: (capture: LearningCaptureSelectionRequest) => Promise<CaptureSelectionResult>
   recordQwertyWord: (record: LearningQwertyWordRecordRequest) => Promise<RecordQwertyWordResult>
 }
@@ -139,19 +142,111 @@ function projectionEntriesFromCapture(capture: LearningCaptureSelectionRequest):
 
 function createProjectionEntryFromQwertyRecord(
   record: LearningQwertyWordRecordRequest,
+  previousEntry: MasteryProjectionEntry | undefined,
+  recentRecords: LearningQwertyWordRecordRequest[],
 ): MasteryProjectionEntry | undefined {
   const accuracyConfidence = Math.max(0.05, Math.min(0.95, record.accuracy))
+  const previousConfidence = previousEntry?.confidence ?? 0.2
+  const correctStreak = getRecentCorrectQwertyStreak(record.word, recentRecords)
   const confidence = record.correct
-    ? Math.max(0.55, accuracyConfidence)
-    : Math.min(0.45, accuracyConfidence)
+    ? Math.min(0.99, Math.max(0.55, previousConfidence + 0.18, accuracyConfidence))
+    : Math.max(0.05, Math.min(0.45, previousConfidence - 0.25, accuracyConfidence))
+  const status = record.correct && record.accuracy >= 0.92 && correctStreak >= 3
+    ? "mature"
+    : record.correct && record.accuracy >= 0.92 ? "review" : "learning"
   return createProjectionEntry({
     text: record.word,
     kind: "word",
     definition: record.definition,
-    status: record.correct && record.accuracy >= 0.92 ? "review" : "learning",
+    status,
     confidence,
     updatedAt: record.createdAt ?? new Date().toISOString(),
   })
+}
+
+function getRecentCorrectQwertyStreak(
+  word: string,
+  records: LearningQwertyWordRecordRequest[],
+) {
+  const normalizedWord = normalizeLearningDaemonText(word)
+  let streak = 0
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    const record = records[index]!
+    if (normalizeLearningDaemonText(record.word) !== normalizedWord) {
+      continue
+    }
+    if (!record.correct || record.accuracy < 0.92) {
+      break
+    }
+    streak += 1
+  }
+  return streak
+}
+
+function createWorkspaceStats(state: LearningDaemonStoreState): LearningWorkspaceStats {
+  const projectionCounts = state.entries.reduce<Record<string, number>>((counts, entry) => {
+    counts[entry.status] = (counts[entry.status] ?? 0) + 1
+    return counts
+  }, {})
+  const accuracyTotal = state.qwertyWordRecords.reduce(
+    (total, record) => total + record.accuracy,
+    0,
+  )
+
+  return {
+    captureCount: state.captures.length,
+    qwertyRecordCount: state.qwertyWordRecords.length,
+    correctQwertyRecordCount: state.qwertyWordRecords.filter(record => record.correct).length,
+    projectionEntryCount: state.entries.length,
+    unknownCount: projectionCounts.unknown ?? 0,
+    learningCount: projectionCounts.learning ?? 0,
+    reviewCount: projectionCounts.review ?? 0,
+    matureCount: projectionCounts.mature ?? 0,
+    archivedCount: projectionCounts.archived ?? 0,
+    averageAccuracy: state.qwertyWordRecords.length
+      ? accuracyTotal / state.qwertyWordRecords.length
+      : 0,
+  }
+}
+
+function createWorkspaceStateResponse(
+  state: LearningDaemonStoreState,
+): LearningWorkspaceStateResponse {
+  return {
+    ok: true,
+    projectionVersion: state.projectionVersion,
+    eventId: state.eventId,
+    stats: createWorkspaceStats(state),
+    captures: state.captures
+      .slice(-50)
+      .reverse()
+      .map(capture => ({
+        id: capture.id,
+        text: capture.text,
+        context: capture.context,
+        sourceUrl: capture.sourceUrl,
+        sourceTitle: capture.sourceTitle,
+        extractedCount: capture.extractedItems.length,
+        createdAt: capture.createdAt,
+      })),
+    qwertyWordRecords: state.qwertyWordRecords
+      .slice(-80)
+      .reverse()
+      .map(record => ({
+        id: record.id,
+        word: record.word,
+        input: record.input,
+        correct: record.correct,
+        accuracy: record.accuracy,
+        durationMs: record.durationMs,
+        dictId: record.dictId,
+        dictName: record.dictName,
+        chapterIndex: record.chapterIndex,
+        wordIndex: record.wordIndex,
+        mistakeCount: record.mistakes.length,
+        createdAt: record.createdAt ?? new Date().toISOString(),
+      })),
+  }
 }
 
 export function createFileLearningDaemonStore(dataDir: string): LearningDaemonStore {
@@ -160,6 +255,10 @@ export function createFileLearningDaemonStore(dataDir: string): LearningDaemonSt
   return {
     async getState() {
       return await readState(filePath)
+    },
+
+    async getWorkspaceState() {
+      return createWorkspaceStateResponse(await readState(filePath))
     },
 
     async captureSelection(capture) {
@@ -198,7 +297,16 @@ export function createFileLearningDaemonStore(dataDir: string): LearningDaemonSt
         ...record,
         createdAt,
       }
-      const entry = createProjectionEntryFromQwertyRecord(recordWithCreatedAt)
+      const previousEntry = state.entries.find(existing =>
+        existing.kind === "word"
+        && existing.normalizedText === normalizeLearningDaemonText(recordWithCreatedAt.word),
+      )
+      const recordsForStreak = [...state.qwertyWordRecords, recordWithCreatedAt]
+      const entry = createProjectionEntryFromQwertyRecord(
+        recordWithCreatedAt,
+        previousEntry,
+        recordsForStreak,
+      )
       if (!entry) {
         throw new Error("Qwerty word record text is empty")
       }
