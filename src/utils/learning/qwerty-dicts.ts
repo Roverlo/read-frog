@@ -1,33 +1,16 @@
-import { browser } from "#imports"
+import type {
+  LearningQwertyDictionaryResource,
+  LearningQwertyWord,
+} from "@/utils/learning-contracts"
+import {
+  getLearningQwertyDictionaries,
+  getLearningQwertyDictionaryChapter,
+} from "@/utils/learning-bridge/daemon-client"
+import { getLearningBridgeConfig } from "@/utils/learning-bridge/storage"
 
-type RuntimeWithLooseGetURL = {
-  runtime: {
-    getURL: (path: string) => string
-  }
-}
-
-export interface QwertyDictResource {
-  id: string
-  name: string
-  description: string
-  category: string
-  tags: string[]
-  path: string
-  length: number
-  language: "en"
-}
-
-export interface QwertyWord {
-  name: string
-  trans: string[]
-  usphone?: string
-  ukphone?: string
-  notation?: string
-}
-
-export interface QwertyWordWithIndex extends QwertyWord {
-  index: number
-}
+export type QwertyDictResource = LearningQwertyDictionaryResource
+export type QwertyWord = Omit<LearningQwertyWord, "index">
+export type QwertyWordWithIndex = LearningQwertyWord
 
 export interface QwertyTypingMistake {
   expected: string
@@ -45,82 +28,85 @@ export interface QwertyTypingResult {
 
 export const QWERTY_CHAPTER_LENGTH = 20
 
-export const QWERTY_DICT_RESOURCES: QwertyDictResource[] = [
+export const QWERTY_DICT_RESOURCES_FALLBACK: QwertyDictResource[] = [
   {
     id: "cet4",
     name: "CET-4",
-    description: "大学英语四级核心词库",
-    category: "中国考试",
-    tags: ["大学英语", "四级"],
-    path: "/dicts/qwerty/CET4_T.json",
+    description: "College English Test Band 4 core vocabulary",
+    category: "Chinese exams",
+    tags: ["college english", "CET-4"],
     length: 2607,
+    chapterLength: QWERTY_CHAPTER_LENGTH,
+    chapterCount: 131,
     language: "en",
   },
   {
     id: "cet6",
     name: "CET-6",
-    description: "大学英语六级核心词库",
-    category: "中国考试",
-    tags: ["大学英语", "六级"],
-    path: "/dicts/qwerty/CET6_T.json",
+    description: "College English Test Band 6 core vocabulary",
+    category: "Chinese exams",
+    tags: ["college english", "CET-6"],
     length: 2345,
+    chapterLength: QWERTY_CHAPTER_LENGTH,
+    chapterCount: 118,
     language: "en",
   },
   {
     id: "toefl",
     name: "TOEFL",
-    description: "托福考试高频词库",
-    category: "国际考试",
+    description: "High-frequency TOEFL vocabulary",
+    category: "International exams",
     tags: ["TOEFL"],
-    path: "/dicts/qwerty/TOEFL_3_T.json",
     length: 4264,
+    chapterLength: QWERTY_CHAPTER_LENGTH,
+    chapterCount: 214,
     language: "en",
   },
   {
     id: "gre1500",
     name: "GRE 1500",
-    description: "GRE 高频重点词库",
-    category: "国际考试",
+    description: "High-frequency GRE vocabulary",
+    category: "International exams",
     tags: ["GRE"],
-    path: "/dicts/qwerty/GRE_1500.json",
     length: 1533,
+    chapterLength: QWERTY_CHAPTER_LENGTH,
+    chapterCount: 77,
     language: "en",
   },
   {
     id: "oxford3000",
     name: "Oxford 3000",
-    description: "牛津 3000 基础高频词",
-    category: "英语词典",
-    tags: ["高频", "基础"],
-    path: "/dicts/qwerty/Oxford3000.json",
+    description: "Oxford 3000 high-frequency vocabulary slice",
+    category: "English dictionaries",
+    tags: ["high frequency", "foundation"],
     length: 1342,
+    chapterLength: QWERTY_CHAPTER_LENGTH,
+    chapterCount: 68,
     language: "en",
   },
   {
     id: "top2000",
     name: "Top 2000",
-    description: "英语高频 2000 词",
-    category: "英语词典",
-    tags: ["高频"],
-    path: "/dicts/qwerty/top2000words.json",
+    description: "High-frequency English top 2000 vocabulary",
+    category: "English dictionaries",
+    tags: ["high frequency"],
     length: 1867,
+    chapterLength: QWERTY_CHAPTER_LENGTH,
+    chapterCount: 94,
     language: "en",
   },
 ]
 
-export function getQwertyDictResource(id: string) {
-  return QWERTY_DICT_RESOURCES.find(dict => dict.id === id) ?? QWERTY_DICT_RESOURCES[0]!
+export const QWERTY_DICT_RESOURCES: QwertyDictResource[] = QWERTY_DICT_RESOURCES_FALLBACK
+
+export function getQwertyDictResource(id: string, dictionaries = QWERTY_DICT_RESOURCES) {
+  return dictionaries.find(dict => dict.id === id) ?? dictionaries[0] ?? QWERTY_DICT_RESOURCES[0]!
 }
 
-export function getQwertyChapterCount(dict: Pick<QwertyDictResource, "length">) {
-  return Math.max(1, Math.ceil(dict.length / QWERTY_CHAPTER_LENGTH))
-}
-
-export function getQwertyDictUrl(path: string) {
-  if (/^https?:\/\//.test(path)) {
-    return path
-  }
-  return (browser as RuntimeWithLooseGetURL).runtime.getURL(path.replace(/^\//, ""))
+export function getQwertyChapterCount(
+  dict: Pick<QwertyDictResource, "chapterCount" | "chapterLength" | "length">,
+) {
+  return dict.chapterCount || Math.max(1, Math.ceil(dict.length / (dict.chapterLength || QWERTY_CHAPTER_LENGTH)))
 }
 
 function normalizeTrans(value: unknown): string[] {
@@ -162,12 +148,38 @@ export function normalizeQwertyWords(raw: unknown): QwertyWordWithIndex[] {
     .filter((word): word is QwertyWordWithIndex => word !== null)
 }
 
-export async function loadQwertyWords(dict: QwertyDictResource): Promise<QwertyWordWithIndex[]> {
-  const response = await fetch(getQwertyDictUrl(dict.path))
-  if (!response.ok) {
-    throw new Error(`Failed to load dictionary ${dict.name}: ${response.status}`)
+async function getQwertyDaemonClientOptions() {
+  const config = await getLearningBridgeConfig()
+  return {
+    baseUrl: config.baseUrl,
+    token: config.token,
   }
-  return normalizeQwertyWords(await response.json())
+}
+
+export async function loadQwertyDictionaryResources(): Promise<QwertyDictResource[]> {
+  const response = await getLearningQwertyDictionaries(await getQwertyDaemonClientOptions())
+  return response.dictionaries
+}
+
+export async function loadQwertyChapterWords(
+  dict: Pick<QwertyDictResource, "id">,
+  chapterIndex: number,
+): Promise<QwertyWordWithIndex[]> {
+  const response = await getLearningQwertyDictionaryChapter(
+    dict.id,
+    chapterIndex,
+    await getQwertyDaemonClientOptions(),
+  )
+  return response.words
+}
+
+export async function loadQwertyWords(dict: QwertyDictResource): Promise<QwertyWordWithIndex[]> {
+  const chapterResponses = await Promise.all(
+    Array.from({ length: getQwertyChapterCount(dict) }, (_, chapterIndex) =>
+      loadQwertyChapterWords(dict, chapterIndex),
+    ),
+  )
+  return chapterResponses.flat()
 }
 
 export function getQwertyChapterWords(words: QwertyWordWithIndex[], chapterIndex: number) {

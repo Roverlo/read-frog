@@ -590,6 +590,10 @@ export const LEARNING_WORKSPACE_HTML = `<!doctype html>
     const state = {
       health: null,
       projection: { projectionVersion: "projection-0", entries: [] },
+      dictionaries: [],
+      dictionaryWords: [],
+      dictionaryId: null,
+      chapterIndex: 0,
       activeIndex: 0,
       session: { attempts: 0, correct: 0 },
       startedAt: Date.now(),
@@ -626,16 +630,31 @@ export const LEARNING_WORKSPACE_HTML = `<!doctype html>
     }
 
     function getPracticeEntries() {
-      return sortEntries(state.projection.entries)
+      const projectedEntries = sortEntries(state.projection.entries)
         .filter((entry) => entry.kind === "word" && entry.status !== "archived" && entry.status !== "mature");
+      if (projectedEntries.length) {
+        return projectedEntries.map((entry) => ({ source: "projection", entry }));
+      }
+      return state.dictionaryWords.map((word) => ({
+        source: "dictionary",
+        word,
+        entry: {
+          normalizedText: word.name,
+          kind: "word",
+          status: "learning",
+          confidence: 0.2,
+          definition: Array.isArray(word.trans) ? word.trans.join("; ") : "",
+          updatedAt: new Date().toISOString(),
+        },
+      }));
     }
 
     function activeEntry() {
-      const entries = getPracticeEntries();
-      if (!entries.length) {
+      const practiceEntries = getPracticeEntries();
+      if (!practiceEntries.length) {
         return null;
       }
-      return entries[state.activeIndex % entries.length];
+      return practiceEntries[state.activeIndex % practiceEntries.length];
     }
 
     function renderHealth() {
@@ -669,16 +688,16 @@ export const LEARNING_WORKSPACE_HTML = `<!doctype html>
       const input = $("typing-input");
       if (!entry) {
         setText("stage-word", "No terms yet");
-        setText("definition", "Capture a selection from the extension or seed a record to begin.");
+        setText("definition", "No projection terms or dictionary words are available.");
         input.value = "";
         input.disabled = true;
         setText("session-active", "-");
       }
       else {
-        setText("stage-word", entry.normalizedText);
-        setText("definition", entry.definition || "No definition saved yet.");
+        setText("stage-word", entry.entry.normalizedText);
+        setText("definition", entry.entry.definition || "No definition saved yet.");
         input.disabled = false;
-        setText("session-active", entry.normalizedText);
+        setText("session-active", entry.entry.normalizedText);
       }
       setText("session-attempts", state.session.attempts);
       setText("session-correct", state.session.correct);
@@ -715,7 +734,7 @@ export const LEARNING_WORKSPACE_HTML = `<!doctype html>
         row.addEventListener("click", () => {
           const practiceEntries = getPracticeEntries();
           const index = practiceEntries.findIndex((candidate) =>
-            candidate.normalizedText === entry.normalizedText && candidate.kind === entry.kind
+            candidate.entry.normalizedText === entry.normalizedText && candidate.entry.kind === entry.kind
           );
           if (index >= 0) {
             state.activeIndex = index;
@@ -759,12 +778,21 @@ export const LEARNING_WORKSPACE_HTML = `<!doctype html>
 
     async function refresh() {
       try {
-        const [healthResponse, projectionResponse] = await Promise.all([
+        const [healthResponse, projectionResponse, dictionariesResponse] = await Promise.all([
           fetch("/api/v1/health"),
           fetch("/api/v1/projection"),
+          fetch("/api/v1/qwerty/dictionaries"),
         ]);
         state.health = await healthResponse.json();
         state.projection = await projectionResponse.json();
+        const dictionaries = await dictionariesResponse.json();
+        state.dictionaries = dictionaries.dictionaries || [];
+        if (!state.dictionaryId && state.dictionaries.length) {
+          state.dictionaryId = state.dictionaries[0].id;
+        }
+        if (!getPracticeEntries().length && state.dictionaryId) {
+          await loadDictionaryChapter(state.dictionaryId, state.chapterIndex);
+        }
         setText("toast", "");
       }
       catch (error) {
@@ -773,6 +801,17 @@ export const LEARNING_WORKSPACE_HTML = `<!doctype html>
         setText("toast", error instanceof Error ? error.message : String(error));
       }
       render();
+    }
+
+    async function loadDictionaryChapter(dictId, chapterIndex) {
+      const chapterResponse = await fetch("/api/v1/qwerty/dictionaries/" + encodeURIComponent(dictId) + "/chapter/" + encodeURIComponent(String(chapterIndex)));
+      if (!chapterResponse.ok) {
+        throw new Error("Dictionary chapter failed to load: " + chapterResponse.status);
+      }
+      const chapter = await chapterResponse.json();
+      state.dictionaryId = chapter.dictionary.id;
+      state.chapterIndex = chapter.chapterIndex;
+      state.dictionaryWords = chapter.words || [];
     }
 
     function mistakesFor(word, input) {
@@ -794,7 +833,7 @@ export const LEARNING_WORKSPACE_HTML = `<!doctype html>
         return;
       }
       const input = $("typing-input").value.trim();
-      const word = entry.normalizedText;
+      const word = entry.entry.normalizedText;
       const mistakes = mistakesFor(word, input);
       const correct = input === word;
       const accuracy = word.length
@@ -813,7 +852,10 @@ export const LEARNING_WORKSPACE_HTML = `<!doctype html>
             correct,
             accuracy,
             durationMs,
-            definition: entry.definition,
+            definition: entry.entry.definition,
+            dictId: entry.source === "dictionary" ? state.dictionaryId : undefined,
+            chapterIndex: entry.source === "dictionary" ? state.chapterIndex : undefined,
+            wordIndex: entry.source === "dictionary" ? entry.word.index : undefined,
             mistakes,
             createdAt: new Date().toISOString(),
           }),

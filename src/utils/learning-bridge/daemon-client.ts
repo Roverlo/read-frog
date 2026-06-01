@@ -3,11 +3,18 @@ import type {
   LearningCaptureSelectionRequest,
   LearningCaptureSelectionResponse,
   LearningDaemonHealthResponse,
+  LearningQwertyDictionariesResponse,
+  LearningQwertyDictionaryChapterResponse,
+  LearningQwertyWordRecordRequest,
+  LearningQwertyWordRecordResponse,
   MasteryProjectionResponse,
 } from "@/utils/learning-contracts"
 import {
   learningCaptureSelectionResponseSchema,
   learningDaemonHealthResponseSchema,
+  learningQwertyDictionariesResponseSchema,
+  learningQwertyDictionaryChapterResponseSchema,
+  learningQwertyWordRecordResponseSchema,
   masteryProjectionResponseSchema,
 } from "@/utils/learning-contracts"
 
@@ -112,4 +119,33 @@ export async function getLearningMasteryProjectionTerms(
     .map(term => `terms=${encodeURIComponent(term)}`)
     .join("&")
   return requestJson(`/api/v1/projection/terms?${query}`, masteryProjectionResponseSchema, options)
+}
+
+export async function getLearningQwertyDictionaries(
+  options: LearningDaemonClientOptions,
+): Promise<LearningQwertyDictionariesResponse> {
+  return requestJson("/api/v1/qwerty/dictionaries", learningQwertyDictionariesResponseSchema, options)
+}
+
+export async function getLearningQwertyDictionaryChapter(
+  dictId: string,
+  chapterIndex: number,
+  options: LearningDaemonClientOptions,
+): Promise<LearningQwertyDictionaryChapterResponse> {
+  return requestJson(
+    `/api/v1/qwerty/dictionaries/${encodeURIComponent(dictId)}/chapter/${encodeURIComponent(String(chapterIndex))}`,
+    learningQwertyDictionaryChapterResponseSchema,
+    options,
+  )
+}
+
+export async function postLearningQwertyWordRecord(
+  request: LearningQwertyWordRecordRequest,
+  options: LearningDaemonClientOptions,
+): Promise<LearningQwertyWordRecordResponse> {
+  return requestJson("/api/v1/qwerty/records/word", learningQwertyWordRecordResponseSchema, {
+    ...options,
+    method: "POST",
+    body: request,
+  })
 }

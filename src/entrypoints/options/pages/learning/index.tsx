@@ -25,7 +25,7 @@ import { extractLearningChildren, generateLearningExplanation, generateReviewMat
 import { exportLearningData, mergeLearningData } from "@/utils/learning/export"
 import { createPrivateLearningDataRepo, getGithubLearningSyncConfig, pollGithubDeviceToken, requestGithubDeviceCode, saveGithubLearningSyncConfig, syncLearningDataToGithub } from "@/utils/learning/github-sync"
 import { getLearningStats, markLearningItemReviewRating, upsertLearningItem } from "@/utils/learning/items"
-import { getQwertyChapterCount, getQwertyChapterWords, getQwertyDictResource, getWordMeaning, loadQwertyWords, QWERTY_CHAPTER_LENGTH, QWERTY_DICT_RESOURCES, scoreTypingInput } from "@/utils/learning/qwerty-dicts"
+import { getQwertyChapterCount, getQwertyDictResource, getWordMeaning, loadQwertyChapterWords, loadQwertyDictionaryResources, QWERTY_CHAPTER_LENGTH, QWERTY_DICT_RESOURCES, scoreTypingInput } from "@/utils/learning/qwerty-dicts"
 import { getQwertyTypingStats, saveQwertyTypingResult } from "@/utils/learning/qwerty-typing"
 import { getLearningSettings, saveLearningSettings } from "@/utils/learning/settings"
 import { createVocabQuestions, estimateVocabularySize, summarizeWeakLevels } from "@/utils/learning/vocab-test"
@@ -695,10 +695,11 @@ function ReviewPanel({
 }
 
 function QwertyTypingPanel({ onChanged }: { onChanged: () => void }) {
+  const [dictionaries, setDictionaries] = useState(QWERTY_DICT_RESOURCES)
   const [dictId, setDictId] = useState(QWERTY_DICT_RESOURCES[0]!.id)
-  const dict = useMemo(() => getQwertyDictResource(dictId), [dictId])
+  const dict = useMemo(() => getQwertyDictResource(dictId, dictionaries), [dictId, dictionaries])
   const [chapterIndex, setChapterIndex] = useState(0)
-  const [words, setWords] = useState<Awaited<ReturnType<typeof loadQwertyWords>>>([])
+  const [chapterWords, setChapterWords] = useState<Awaited<ReturnType<typeof loadQwertyChapterWords>>>([])
   const [wordCursor, setWordCursor] = useState(0)
   const [typedText, setTypedText] = useState("")
   const [startedAt, setStartedAt] = useState<number | null>(null)
@@ -708,7 +709,6 @@ function QwertyTypingPanel({ onChanged }: { onChanged: () => void }) {
   const [isSaving, setIsSaving] = useState(false)
 
   const chapterCount = getQwertyChapterCount(dict)
-  const chapterWords = useMemo(() => getQwertyChapterWords(words, chapterIndex), [chapterIndex, words])
   const currentWord = chapterWords[wordCursor]
   const progressValue = chapterWords.length === 0
     ? 0
@@ -720,20 +720,45 @@ function QwertyTypingPanel({ onChanged }: { onChanged: () => void }) {
 
   useEffect(() => {
     let cancelled = false
+    void loadQwertyDictionaryResources()
+      .then((loadedDictionaries) => {
+        if (cancelled || loadedDictionaries.length === 0) {
+          return
+        }
+        setDictionaries(loadedDictionaries)
+        if (!loadedDictionaries.some(resource => resource.id === dictId)) {
+          setDictId(loadedDictionaries[0]!.id)
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          toast.error("Qwerty dictionary manifest failed to load", {
+            description: error instanceof Error ? error.message : undefined,
+          })
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [dictId])
+
+  useEffect(() => {
+    let cancelled = false
     setIsLoading(true)
     setLastResult(null)
     setTypedText("")
     setStartedAt(null)
     setWordCursor(0)
-    void loadQwertyWords(dict)
+    void loadQwertyChapterWords(dict, chapterIndex)
       .then((loadedWords) => {
         if (!cancelled) {
-          setWords(loadedWords)
+          setChapterWords(loadedWords)
         }
       })
       .catch((error) => {
         if (!cancelled) {
-          setWords([])
+          setChapterWords([])
           toast.error("词库加载失败", {
             description: error instanceof Error ? error.message : undefined,
           })
@@ -748,7 +773,7 @@ function QwertyTypingPanel({ onChanged }: { onChanged: () => void }) {
     return () => {
       cancelled = true
     }
-  }, [dict])
+  }, [chapterIndex, dict])
 
   useEffect(() => {
     void refreshStats()
@@ -842,7 +867,7 @@ function QwertyTypingPanel({ onChanged }: { onChanged: () => void }) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {QWERTY_DICT_RESOURCES.map(resource => (
+              {dictionaries.map(resource => (
                 <SelectItem key={resource.id} value={resource.id}>
                   {resource.name}
                 </SelectItem>
@@ -903,13 +928,26 @@ function QwertyTypingPanel({ onChanged }: { onChanged: () => void }) {
                       <div className="min-w-0">
                         <div className="break-words text-4xl font-semibold leading-tight tracking-normal">{currentWord.name}</div>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                          {currentWord.usphone && <Badge variant="outline">US {currentWord.usphone}</Badge>}
-                          {currentWord.ukphone && <Badge variant="outline">UK {currentWord.ukphone}</Badge>}
+                          {currentWord.usphone && (
+                            <Badge variant="outline">
+                              US
+                              {" "}
+                              {currentWord.usphone}
+                            </Badge>
+                          )}
+                          {currentWord.ukphone && (
+                            <Badge variant="outline">
+                              UK
+                              {" "}
+                              {currentWord.ukphone}
+                            </Badge>
+                          )}
                           <Badge variant="secondary">{dict.category}</Badge>
                         </div>
                       </div>
                       <div className="text-right text-sm text-muted-foreground">
-                        #{currentWord.index + 1}
+                        #
+                        {currentWord.index + 1}
                       </div>
                     </div>
                     <p className="text-sm leading-6 text-muted-foreground">{getWordMeaning(currentWord) || "暂无释义"}</p>

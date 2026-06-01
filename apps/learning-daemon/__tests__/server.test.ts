@@ -115,6 +115,47 @@ describe("learning daemon server", () => {
     })
   })
 
+  it("serves qwerty dictionaries from the daemon asset directory", async () => {
+    const dictionariesResponse = await fetch(`${baseUrl}/api/v1/qwerty/dictionaries`)
+
+    const dictionariesBody = await dictionariesResponse.json()
+    expect(dictionariesBody).toMatchObject({
+      ok: true,
+    })
+    expect(dictionariesBody.dictionaries).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "cet4",
+        name: "CET-4",
+        chapterLength: 20,
+        chapterCount: 131,
+      }),
+    ]))
+
+    const chapterResponse = await fetch(`${baseUrl}/api/v1/qwerty/dictionaries/cet4/chapter/0`)
+    const chapterBody = await chapterResponse.json()
+    expect(chapterBody).toMatchObject({
+      ok: true,
+      dictionary: {
+        id: "cet4",
+      },
+      chapterIndex: 0,
+    })
+    expect(chapterBody.words).toHaveLength(20)
+    expect(chapterBody.words).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        index: 0,
+        name: "cancel",
+      }),
+    ]))
+
+    const rawResponse = await fetch(`${baseUrl}/dicts/qwerty/CET4_T.json`)
+    expect(rawResponse.status).toBe(200)
+    expect(rawResponse.headers.get("content-type")).toContain("application/json")
+    await expect(rawResponse.json()).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "cancel" }),
+    ]))
+  })
+
   it("records qwerty word practice and updates the mastery projection", async () => {
     const recordResponse = await fetch(`${baseUrl}/api/v1/qwerty/records/word`, {
       method: "POST",

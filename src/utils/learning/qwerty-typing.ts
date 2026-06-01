@@ -1,7 +1,9 @@
-import type { QwertyTypingRecord } from "@/types/learning"
 import type { QwertyDictResource, QwertyTypingResult, QwertyWordWithIndex } from "./qwerty-dicts"
+import type { QwertyTypingRecord } from "@/types/learning"
 import { getRandomUUID } from "@/utils/crypto-polyfill"
 import { db } from "@/utils/db/dexie/db"
+import { postLearningQwertyWordRecord } from "@/utils/learning-bridge/daemon-client"
+import { getLearningBridgeConfig } from "@/utils/learning-bridge/storage"
 import { markLearningItemReviewRating, upsertLearningItem } from "./items"
 import { getWordMeaning } from "./qwerty-dicts"
 import { getTypingRating } from "./qwerty-rating"
@@ -56,8 +58,40 @@ export async function saveQwertyTypingResult(input: {
 
   await db.qwertyTypingRecords.add(record)
   await markLearningItemReviewRating(item.id, getTypingRating(input.result), { reviewedAt: now })
+  void syncQwertyTypingRecordToDaemon(record, getWordMeaning(input.word))
 
   return { item, record }
+}
+
+async function syncQwertyTypingRecordToDaemon(record: QwertyTypingRecord, definition?: string) {
+  try {
+    const config = await getLearningBridgeConfig()
+    if (!config.enabled) {
+      return
+    }
+
+    await postLearningQwertyWordRecord({
+      id: record.id,
+      word: record.word,
+      input: record.input,
+      correct: record.correct,
+      accuracy: Math.max(0, Math.min(1, record.accuracy / 100)),
+      durationMs: record.durationMs,
+      dictId: record.dictId,
+      dictName: record.dictName,
+      chapterIndex: record.chapterIndex,
+      wordIndex: record.wordIndex,
+      definition,
+      mistakes: record.mistakes,
+      createdAt: record.createdAt.toISOString(),
+    }, {
+      baseUrl: config.baseUrl,
+      token: config.token,
+    })
+  }
+  catch {
+    // The extension keeps its local record when the daemon is offline.
+  }
 }
 
 export async function getQwertyTypingStats() {

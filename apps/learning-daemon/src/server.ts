@@ -14,11 +14,18 @@ import {
   learningCaptureSelectionRequestSchema,
   learningCaptureSelectionResponseSchema,
   learningDaemonHealthResponseSchema,
+  learningQwertyDictionariesResponseSchema,
+  learningQwertyDictionaryChapterResponseSchema,
   learningQwertyWordRecordRequestSchema,
   learningQwertyWordRecordResponseSchema,
   masteryProjectionResponseSchema,
   masteryProjectionTermsRequestSchema,
 } from "../../../src/utils/learning-contracts/schemas.ts"
+import {
+  getQwertyDictionaryChapter,
+  getQwertyDictionaryResources,
+  readQwertyDictionaryRawJson,
+} from "./qwerty-dictionaries.ts"
 import { normalizeLearningDaemonText } from "./store.ts"
 import { LEARNING_WORKSPACE_HTML } from "./workspace.ts"
 
@@ -67,6 +74,12 @@ function sendJson(response: ServerResponse, statusCode: number, body: unknown) {
 function sendHtml(response: ServerResponse, statusCode: number, body: string) {
   response.statusCode = statusCode
   response.setHeader("content-type", "text/html; charset=utf-8")
+  response.end(body)
+}
+
+function sendRawJson(response: ServerResponse, statusCode: number, body: string) {
+  response.statusCode = statusCode
+  response.setHeader("content-type", "application/json; charset=utf-8")
   response.end(body)
 }
 
@@ -179,6 +192,39 @@ async function handleQwertyWordRecord(
   }))
 }
 
+function handleQwertyDictionaries(response: ServerResponse) {
+  sendJson(response, 200, learningQwertyDictionariesResponseSchema.parse({
+    ok: true,
+    dictionaries: getQwertyDictionaryResources(),
+  }))
+}
+
+async function handleQwertyDictionaryChapter(
+  dictId: string,
+  chapterIndexValue: string,
+  response: ServerResponse,
+) {
+  const chapterIndex = Number.parseInt(chapterIndexValue, 10)
+  const chapter = await getQwertyDictionaryChapter(dictId, Number.isFinite(chapterIndex) ? chapterIndex : 0)
+  if (!chapter) {
+    sendError(response, 404, "Qwerty dictionary not found")
+    return
+  }
+  sendJson(response, 200, learningQwertyDictionaryChapterResponseSchema.parse({
+    ok: true,
+    ...chapter,
+  }))
+}
+
+async function handleQwertyRawDictionary(fileName: string, response: ServerResponse) {
+  const rawJson = await readQwertyDictionaryRawJson(fileName)
+  if (rawJson === undefined) {
+    sendError(response, 404, "Qwerty dictionary not found")
+    return
+  }
+  sendRawJson(response, 200, rawJson)
+}
+
 export function createLearningDaemonServer(options: LearningDaemonServerOptions) {
   const allowedOrigins = options.allowedOrigins ?? DEFAULT_ALLOWED_ORIGINS
   const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES
@@ -214,6 +260,27 @@ export function createLearningDaemonServer(options: LearningDaemonServerOptions)
       if (request.method === "GET" && path === "/api/v1/projection/terms") {
         await handleProjectionTerms(options.store, url, response)
         return
+      }
+
+      if (request.method === "GET" && path === "/api/v1/qwerty/dictionaries") {
+        handleQwertyDictionaries(response)
+        return
+      }
+
+      if (request.method === "GET") {
+        const match = /^\/api\/v1\/qwerty\/dictionaries\/([^/]+)\/chapter\/([^/]+)$/.exec(path)
+        if (match) {
+          await handleQwertyDictionaryChapter(decodeURIComponent(match[1]!), match[2]!, response)
+          return
+        }
+      }
+
+      if (request.method === "GET") {
+        const match = /^\/dicts\/qwerty\/([^/]+\.json)$/.exec(path)
+        if (match) {
+          await handleQwertyRawDictionary(decodeURIComponent(match[1]!), response)
+          return
+        }
       }
 
       if (request.method === "POST" && path === "/api/v1/capture/selection") {

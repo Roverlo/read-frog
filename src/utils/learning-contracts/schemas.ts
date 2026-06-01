@@ -104,6 +104,39 @@ export const learningQwertyWordRecordResponseSchema = z.object({
   entry: masteryProjectionEntrySchema,
 })
 
+export const learningQwertyDictionaryResourceSchema = z.object({
+  id: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+  description: z.string().default(""),
+  category: z.string().default(""),
+  tags: z.array(z.string()).default([]),
+  length: z.number().int().nonnegative(),
+  chapterLength: z.number().int().positive(),
+  chapterCount: z.number().int().positive(),
+  language: z.literal("en"),
+})
+
+export const learningQwertyWordSchema = z.object({
+  index: z.number().int().nonnegative(),
+  name: z.string().trim().min(1),
+  trans: z.array(z.string()).default([]),
+  usphone: z.string().optional(),
+  ukphone: z.string().optional(),
+  notation: z.string().optional(),
+})
+
+export const learningQwertyDictionariesResponseSchema = z.object({
+  ok: z.literal(true),
+  dictionaries: z.array(learningQwertyDictionaryResourceSchema),
+})
+
+export const learningQwertyDictionaryChapterResponseSchema = z.object({
+  ok: z.literal(true),
+  dictionary: learningQwertyDictionaryResourceSchema,
+  chapterIndex: z.number().int().nonnegative(),
+  words: z.array(learningQwertyWordSchema),
+})
+
 export const masteryProjectionTermsRequestSchema = z.object({
   terms: z.array(z.string().trim().min(1)).min(1).max(MAX_MASTERY_PROJECTION_TERMS),
 })
@@ -117,6 +150,10 @@ export type LearningCaptureSelectionRequest = z.infer<typeof learningCaptureSele
 export type LearningCaptureSelectionResponse = z.infer<typeof learningCaptureSelectionResponseSchema>
 export type LearningDaemonHealthResponse = z.infer<typeof learningDaemonHealthResponseSchema>
 export type LearningQwertyMistake = z.infer<typeof learningQwertyMistakeSchema>
+export type LearningQwertyDictionariesResponse = z.infer<typeof learningQwertyDictionariesResponseSchema>
+export type LearningQwertyDictionaryChapterResponse = z.infer<typeof learningQwertyDictionaryChapterResponseSchema>
+export type LearningQwertyDictionaryResource = z.infer<typeof learningQwertyDictionaryResourceSchema>
+export type LearningQwertyWord = z.infer<typeof learningQwertyWordSchema>
 export type LearningQwertyWordRecordRequest = z.infer<typeof learningQwertyWordRecordRequestSchema>
 export type LearningQwertyWordRecordResponse = z.infer<typeof learningQwertyWordRecordResponseSchema>
 export type MasteryProjectionEntry = z.infer<typeof masteryProjectionEntrySchema>
