@@ -59,7 +59,13 @@
 
         <section class="surface practice" aria-label="Qwerty practice">
           <div class="stage">
-            <div class="label">Qwerty practice</div>
+            <div class="stage-head">
+              <div>
+                <div class="label">Qwerty practice</div>
+                <div id="practice-source" class="source-line">Projection queue</div>
+              </div>
+              <div class="chapter-chip" id="chapter-chip">Chapter 1</div>
+            </div>
             <div id="stage-word" class="stage-word">No terms yet</div>
             <input id="typing-input" class="stage-input" autocomplete="off" spellcheck="false" aria-label="Type current word">
             <div id="definition" class="definition">Capture a selection from the extension or seed a record to begin.</div>
@@ -75,6 +81,24 @@
             <div class="session-row"><span>Accuracy</span><strong id="session-accuracy">0%</strong></div>
             <div class="session-row"><span>Active term</span><strong id="session-active">-</strong></div>
           </div>
+        </section>
+
+        <section class="surface deck-panel" aria-label="Qwerty deck controls">
+          <div class="deck-controls">
+            <label class="select-field">
+              <span class="label">Deck</span>
+              <select id="dictionary-select" aria-label="Select qwerty dictionary"></select>
+            </label>
+            <div class="chapter-controls">
+              <button id="previous-chapter-button" class="secondary" type="button">Prev</button>
+              <div class="chapter-meta">
+                <strong id="chapter-title">Chapter 1</strong>
+                <span id="chapter-range">0 words</span>
+              </div>
+              <button id="next-chapter-button" class="secondary" type="button">Next</button>
+            </div>
+          </div>
+          <div id="chapter-word-strip" class="word-strip" aria-label="Current chapter words"></div>
         </section>
 
         <section class="table-wrap" aria-label="Projection terms">

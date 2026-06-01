@@ -65,6 +65,8 @@ describe("learning daemon server", () => {
     expect(html).toContain("data-readfrog-learning-workspace")
     expect(html).toContain("/workspace/app.css")
     expect(html).toContain("/workspace/app.js")
+    expect(html).toContain("dictionary-select")
+    expect(html).toContain("chapter-word-strip")
   })
 
   it("serves workspace static assets without exposing arbitrary files", async () => {
@@ -80,7 +82,9 @@ describe("learning daemon server", () => {
 
     expect(jsResponse.status).toBe(200)
     expect(jsResponse.headers.get("content-type")).toContain("text/javascript")
-    await expect(jsResponse.text()).resolves.toContain("/api/v1/workspace/state")
+    const js = await jsResponse.text()
+    expect(js).toContain("/api/v1/workspace/state")
+    expect(js).toContain("/api/v1/qwerty/dictionaries/")
 
     expect(missingResponse.status).toBe(404)
   })

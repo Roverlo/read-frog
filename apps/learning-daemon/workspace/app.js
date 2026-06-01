@@ -5,6 +5,7 @@
       dictionaries: [],
       dictionaryWords: [],
       dictionaryId: null,
+      dictionary: null,
       chapterIndex: 0,
       activeIndex: 0,
       session: { attempts: 0, correct: 0 },
@@ -15,6 +16,10 @@
 
     function setText(id, value) {
       $(id).textContent = String(value);
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max);
     }
 
     function emptyTableRow(message) {
@@ -95,6 +100,7 @@
     function renderPractice() {
       const entry = activeEntry();
       const input = $("typing-input");
+      const practiceEntries = getPracticeEntries();
       if (!entry) {
         setText("stage-word", "No terms yet");
         setText("definition", "No projection terms or dictionary words are available.");
@@ -108,12 +114,69 @@
         input.disabled = false;
         setText("session-active", entry.entry.normalizedText);
       }
+      setText("practice-source", entry?.source === "dictionary"
+        ? `${state.dictionary?.name ?? "Deck"} chapter practice`
+        : "Projection review queue");
+      setText("chapter-chip", state.dictionary
+        ? `Chapter ${state.chapterIndex + 1}/${state.dictionary.chapterCount}`
+        : "No deck");
       setText("session-attempts", state.session.attempts);
       setText("session-correct", state.session.correct);
       const accuracy = state.session.attempts
         ? Math.round((state.session.correct / state.session.attempts) * 100)
         : 0;
       setText("session-accuracy", accuracy + "%");
+      renderChapterWords(entry);
+    }
+
+    function renderDeckControls() {
+      const select = $("dictionary-select");
+      const currentValue = select.value;
+      select.replaceChildren(...state.dictionaries.map((dictionary) => {
+        const option = document.createElement("option");
+        option.value = dictionary.id;
+        option.textContent = `${dictionary.name} (${dictionary.length})`;
+        return option;
+      }));
+      select.value = state.dictionaryId ?? currentValue ?? "";
+
+      const chapterCount = state.dictionary?.chapterCount ?? 0;
+      setText("chapter-title", state.dictionary
+        ? `${state.dictionary.name} · Chapter ${state.chapterIndex + 1}`
+        : "No deck selected");
+      setText("chapter-range", state.dictionaryWords.length
+        ? `${state.dictionaryWords[0].index + 1}-${state.dictionaryWords[state.dictionaryWords.length - 1].index + 1} of ${state.dictionary?.length ?? state.dictionaryWords.length}`
+        : "0 words");
+      $("previous-chapter-button").disabled = !state.dictionary || state.chapterIndex <= 0;
+      $("next-chapter-button").disabled = !state.dictionary || state.chapterIndex >= chapterCount - 1;
+    }
+
+    function renderChapterWords(active) {
+      const strip = $("chapter-word-strip");
+      if (!state.dictionaryWords.length) {
+        strip.replaceChildren(emptyContext("Deck words load after the daemon serves the selected qwerty chapter."));
+        renderDeckControls();
+        return;
+      }
+
+      strip.replaceChildren(...state.dictionaryWords.map((word, index) => {
+        const token = document.createElement("button");
+        token.type = "button";
+        token.className = "word-token";
+        if (active?.source === "dictionary" && active.entry.normalizedText === word.name) {
+          token.classList.add("active");
+        }
+        token.textContent = `${index + 1}. ${word.name}`;
+        token.addEventListener("click", () => {
+          state.activeIndex = index;
+          $("typing-input").value = "";
+          state.startedAt = Date.now();
+          renderPractice();
+          $("typing-input").focus();
+        });
+        return token;
+      }));
+      renderDeckControls();
     }
 
     function renderProjection() {
@@ -236,8 +299,11 @@
       }
       const chapter = await chapterResponse.json();
       state.dictionaryId = chapter.dictionary.id;
+      state.dictionary = chapter.dictionary;
       state.chapterIndex = chapter.chapterIndex;
       state.dictionaryWords = chapter.words || [];
+      state.activeIndex = 0;
+      state.startedAt = Date.now();
     }
 
     function mistakesFor(word, input) {
@@ -309,6 +375,43 @@
 
     $("refresh-button").addEventListener("click", refresh);
     $("submit-button").addEventListener("click", submitPractice);
+    $("dictionary-select").addEventListener("change", (event) => {
+      const nextDictionaryId = event.target.value;
+      if (!nextDictionaryId) {
+        return;
+      }
+      void loadDictionaryChapter(nextDictionaryId, 0)
+        .then(() => {
+          render();
+          $("typing-input").focus();
+        })
+        .catch((error) => {
+          $("toast").classList.add("error");
+          setText("toast", error instanceof Error ? error.message : String(error));
+        });
+    });
+    $("previous-chapter-button").addEventListener("click", () => {
+      if (!state.dictionaryId) {
+        return;
+      }
+      const nextChapter = clamp(state.chapterIndex - 1, 0, state.dictionary?.chapterCount ?? 1);
+      void loadDictionaryChapter(state.dictionaryId, nextChapter)
+        .then(() => {
+          render();
+          $("typing-input").focus();
+        });
+    });
+    $("next-chapter-button").addEventListener("click", () => {
+      if (!state.dictionaryId) {
+        return;
+      }
+      const nextChapter = clamp(state.chapterIndex + 1, 0, (state.dictionary?.chapterCount ?? 1) - 1);
+      void loadDictionaryChapter(state.dictionaryId, nextChapter)
+        .then(() => {
+          render();
+          $("typing-input").focus();
+        });
+    });
     $("skip-button").addEventListener("click", () => {
       state.activeIndex += 1;
       $("typing-input").value = "";
