@@ -1,7 +1,7 @@
 # Read Frog Learning Container Redesign
 
 Status: active implementation on the `feature/learning-loop` branch.
-Last verified: 2026-06-01.
+Last verified: 2026-06-02.
 
 This document tracks the learning-loop redesign around three upstream projects:
 
@@ -46,6 +46,112 @@ Still pending:
 - Add broader real-browser E2E coverage for extension-to-daemon sync and page translation behavior.
 - Build richer Today/Decks/Analytics screens beyond the current compact workspace.
 
+## Translation Ingestion Direction
+
+The next product step is to treat Read Frog as the browser-side translation and capture shell, while the learning daemon becomes the durable study-data hub.
+
+### Read Frog extension changes
+
+Keep the upstream-facing patch small:
+
+- Add one learning/interface tab in the existing options UI for daemon URL, connection status, pairing, and toggles.
+- Keep the extension UI focused on configuration: translation capture on/off, selection capture on/off, selective translation on/off, retention policy, and workspace open button.
+- Hook translated results at a central translation boundary instead of scattering capture code through UI components.
+- Send non-empty translation results to the daemon through a typed bridge method.
+- Queue translation events locally when the daemon is offline and flush them in the background.
+- Never block page translation on learning-data writes; learning capture is best-effort with visible queue status.
+
+Candidate capture surfaces:
+
+- Page paragraph translation from `translateTextForPage`.
+- Page title translation from `translateTextForPageTitle`.
+- Input translation from `translateTextForInput`.
+- Selection/context-menu translation once the exact result boundary is identified.
+- Learning-mode summaries, marked separately from normal translation output.
+
+The event payload should include source text, translated text, source/target language, page URL/title, provider id, translation mode, created time, and a content hash. It should not include provider secrets or full provider config.
+
+### Learning daemon changes
+
+Add a translation-ingestion API and model it separately from manual selections:
+
+```text
+POST /api/v1/capture/translation
+POST /api/v1/capture/translation/batch
+GET  /api/v1/translation/events
+GET  /api/v1/translation/units
+```
+
+The daemon should deduplicate repeated translations by stable hashes, then derive study material:
+
+- Words and phrases extracted from source text.
+- Sentence pairs from source and translated text.
+- Paragraph-level reading units for comprehension practice.
+- Review candidates based on frequency, recency, translation difficulty, and qwerty mistakes.
+- Mastery projection entries that feed selective translation back into the extension.
+
+This creates a closed loop:
+
+```text
+Read Frog translates pages
+  -> daemon stores translation events
+  -> workspace turns them into word/phrase/sentence/reading practice
+  -> qwerty/review updates mastery
+  -> extension translates less for mastered material
+```
+
+### Workspace updates
+
+The current tabbed workspace should grow around translation-derived learning data:
+
+- `阅读`: translated page/paragraph inbox, sentence pairs, source URL/title, and triage actions.
+- `打字`: qwerty practice from dictionaries plus a generated "来自阅读" deck.
+- `掌握度`: word/phrase/sentence projection with confidence, due status, and source frequency.
+- `错题`: wrong words, wrong keys, and weak sentence patterns.
+- `数据`: backup/restore, import/export, daemon storage health, and retention controls.
+- Future `练句`: cloze, sentence reconstruction, shadowing, or source-to-translation recall.
+
+## Storage Plan
+
+The current JSON store is acceptable for the prototype but should be replaced before broad translation ingestion because page translation can create many records.
+
+### SQLite first
+
+Use daemon-owned SQLite in the container data volume:
+
+- `learning_events`: append-only event log for captures, translations, qwerty records, imports, and reviews.
+- `translation_units`: deduplicated source/translation pairs with page metadata and hashes.
+- `learning_items`: normalized words, phrases, sentences, and paragraphs.
+- `item_sources`: many-to-many links from learning items to translation units/captures.
+- `mastery_cards`: FSRS/SRS state, due time, confidence, and status.
+- `review_logs`: qwerty, reading, recall, and manual review outcomes.
+- `qwerty_word_records` and `qwerty_chapter_records`: typing practice history.
+- `sync_cursors`: extension/client cursors and projection version.
+- `schema_migrations`: frozen migrations with explicit versions.
+
+Use WAL mode, atomic transactions, migration tests, and periodic compacting of derived tables. Keep the event log append-only enough to rebuild projection if a derived table becomes corrupt.
+
+### Safety and privacy
+
+- Bind the daemon to `127.0.0.1` only.
+- Require pairing before accepting extension writes.
+- Use a daemon-generated bearer token stored by the extension after pairing.
+- Validate `Origin` and paired extension id for CORS.
+- Store API/provider keys only in Read Frog's existing config path, not in the daemon learning DB.
+- Encrypt or at least permission-lock the daemon data directory for packaged desktop builds; for Docker, document the named volume path and backup process.
+- Add retention controls: keep all, keep last N days, or store only extracted study units instead of full translated paragraphs.
+- Hash text for dedupe, but keep raw text only when the user enables translation capture.
+- Redact or skip very long/private pages when configured.
+
+### Backup
+
+Exports should remain portable but evolve from raw JSON state to a versioned backup:
+
+- Include schema version, projection version, exported time, and stats.
+- Export SQLite-derived state as a stable JSON format, not as a raw DB file.
+- Support incremental import by stable ids and timestamps.
+- Keep old `read-frog-learning-daemon-v1` import compatibility until the SQLite format is proven.
+
 ## Original State Findings
 
 These were the main problems before the daemon split. They remain useful context for why this branch isolates learning work outside upstream-owned extension surfaces.
@@ -64,9 +170,9 @@ These were the main problems before the daemon split. They remain useful context
 Verified upstream main:
 
 - Repository: `https://github.com/mengxi-ream/read-frog`
-- Commit: `c9b157ad56a42d2ba691cbbbbc9859d378802f5d`
-- Date: 2026-05-28
-- Subject: `fix(providers): migrate 302 ai configs to custom provider (#1618)`
+- Commit: `17e77d79bfb919b0875330536a8063c3d7ff820b`
+- Date: 2026-06-01
+- Subject: `docs(i18n): update incorrect zh-TW translations (#1628)`
 
 Read Frog should remain the extension shell. The fork should avoid turning it into the full learning app because browser extension entrypoints and store review constraints are a poor fit for a large local-first workspace.
 

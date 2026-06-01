@@ -2,7 +2,7 @@
 
 This branch keeps Read Frog close to `mengxi-ream/read-frog` by moving the learning workspace into a daemon/container and keeping extension changes narrow.
 
-Last updated: 2026-06-01.
+Last updated: 2026-06-02.
 
 ## Upstream Remotes
 
@@ -45,6 +45,7 @@ Purpose:
 - Give content scripts, popup, options, and translation code a typed boundary to the daemon.
 - Queue selection captures and qwerty practice records locally when the daemon is offline.
 - Query mastery projection terms for selective translation.
+- Queue translated page/input/selection events locally when translation ingestion is enabled.
 
 Upstream sync rule:
 
@@ -62,7 +63,7 @@ Owned fork surface:
 
 Purpose:
 
-- Keep the extension as a thin bridge: open daemon workspace, configure daemon URL, toggle selection capture, and toggle selective translation.
+- Keep the extension as a thin bridge: open daemon workspace, configure daemon URL, toggle selection capture, toggle translation ingestion, and toggle selective translation.
 - Avoid maintaining the full learning dashboard, qwerty trainer, review sessions, import/export, and analytics inside extension options.
 
 Upstream sync rule:
@@ -88,6 +89,28 @@ Upstream sync rule:
 
 - Keep provider, prompt, language, and queue changes minimal.
 - Translation cache changes must include projection-relevant inputs before selective translation is treated as complete.
+
+### Translation Ingestion
+
+Planned fork surface:
+
+- a small capture hook around central translation result functions in `src/utils/host/translate/**`
+- bridge methods in `src/utils/learning-bridge/**`
+- contract schemas in `src/utils/learning-contracts/**`
+- daemon routes/store code under `apps/learning-daemon/**`
+
+Purpose:
+
+- Send completed translation results into the daemon as durable study data.
+- Let the daemon derive word, phrase, sentence, and paragraph practice from real reading history.
+- Keep the extension translation experience fast by making learning ingestion best-effort and queue-backed.
+
+Upstream sync rule:
+
+- Prefer one central translation-result hook over edits in many UI components.
+- Do not modify provider-specific implementations unless the shared translation-result boundary cannot represent the event.
+- Never send API keys, provider config, cookies, or browser credentials into the daemon learning database.
+- Translation ingestion should be controlled from the learning/interface tab and should be safe to disable.
 
 ### Legacy Local Learning Fallback
 
