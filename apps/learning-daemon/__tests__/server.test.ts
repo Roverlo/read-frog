@@ -303,6 +303,100 @@ describe("learning daemon server", () => {
     })
   })
 
+  it("serializes concurrent daemon writes so bridge and workspace updates do not overwrite each other", async () => {
+    await Promise.all([
+      fetch(`${baseUrl}/api/v1/capture/selection`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: new Blob([JSON.stringify({
+          id: "capture-concurrent",
+          text: "repeatable workflow",
+          context: "A repeatable workflow helps teams improve.",
+          createdAt: "2026-06-01T00:00:00.000Z",
+          extractedItems: [
+            {
+              text: "workflow",
+              kind: "word",
+              explanation: { meaningZh: "workflow definition" },
+            },
+          ],
+        })]),
+      }),
+      fetch(`${baseUrl}/api/v1/qwerty/records/word`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: new Blob([JSON.stringify({
+          id: "record-concurrent",
+          word: "ability",
+          input: "ability",
+          correct: true,
+          accuracy: 1,
+          durationMs: 1100,
+          definition: "ability definition",
+          mistakes: [],
+          createdAt: "2026-06-01T00:01:00.000Z",
+        })]),
+      }),
+      fetch(`${baseUrl}/api/v1/qwerty/records/chapter`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: new Blob([JSON.stringify({
+          id: "chapter-concurrent",
+          dictId: "cet4",
+          dictName: "CET-4",
+          chapterIndex: 1,
+          durationMs: 45_000,
+          wordCount: 20,
+          correctCount: 19,
+          wrongCount: 1,
+          accuracy: 0.95,
+          correctWordIndexes: [20, 21],
+          createdAt: "2026-06-01T00:02:00.000Z",
+        })]),
+      }),
+    ])
+
+    const workspaceResponse = await fetch(`${baseUrl}/api/v1/workspace/state`)
+    await expect(workspaceResponse.json()).resolves.toMatchObject({
+      ok: true,
+      projectionVersion: "projection-3",
+      stats: {
+        captureCount: 1,
+        qwertyRecordCount: 1,
+        qwertyChapterRecordCount: 1,
+        projectionEntryCount: 3,
+      },
+      captures: [
+        {
+          id: "capture-concurrent",
+        },
+      ],
+      qwertyWordRecords: [
+        {
+          id: "record-concurrent",
+          word: "ability",
+        },
+      ],
+      qwertyChapterRecords: [
+        {
+          id: "chapter-concurrent",
+          dictId: "cet4",
+          chapterIndex: 1,
+        },
+      ],
+    })
+
+    const projectionResponse = await fetch(`${baseUrl}/api/v1/projection/terms?terms=workflow,ability`)
+    await expect(projectionResponse.json()).resolves.toMatchObject({
+      ok: true,
+      projectionVersion: "projection-3",
+      entries: expect.arrayContaining([
+        expect.objectContaining({ normalizedText: "workflow" }),
+        expect.objectContaining({ normalizedText: "ability" }),
+      ]),
+    })
+  })
+
   it("records qwerty chapter practice and exposes chapter summaries", async () => {
     const chapterResponse = await fetch(`${baseUrl}/api/v1/qwerty/records/chapter`, {
       method: "POST",

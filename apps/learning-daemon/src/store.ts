@@ -340,113 +340,145 @@ function createWorkspaceStateResponse(
 
 export function createFileLearningDaemonStore(dataDir: string): LearningDaemonStore {
   const filePath = getStatePath(dataDir)
+  let mutationTail = Promise.resolve()
+
+  async function readSettledState() {
+    await mutationTail
+    return await readState(filePath)
+  }
+
+  function enqueueMutation<T>(
+    mutate: (state: LearningDaemonStoreState) => Promise<{
+      nextState: LearningDaemonStoreState
+      result: T
+    }> | {
+      nextState: LearningDaemonStoreState
+      result: T
+    },
+  ): Promise<T> {
+    const run = mutationTail.then(async () => {
+      const state = await readState(filePath)
+      const { nextState, result } = await mutate(state)
+      await writeState(filePath, nextState)
+      return result
+    })
+    mutationTail = run.then(() => undefined, () => undefined)
+    return run
+  }
 
   return {
     async getState() {
-      return await readState(filePath)
+      return await readSettledState()
     },
 
     async getWorkspaceState() {
-      return createWorkspaceStateResponse(await readState(filePath))
+      return createWorkspaceStateResponse(await readSettledState())
     },
 
     async captureSelection(capture) {
-      const state = await readState(filePath)
-      const sequence = state.sequence + 1
-      const projectionVersion = `projection-${sequence}`
-      const eventId = `event-${sequence}`
-      const entries = projectionEntriesFromCapture(capture).reduce(
-        (currentEntries, entry) => upsertProjectionEntry(currentEntries, entry),
-        state.entries,
-      )
-      const itemIds = [
-        capture.id,
-        ...capture.extractedItems.map((_, index) => `${capture.id}:child:${index}`),
-      ]
+      return await enqueueMutation((state) => {
+        const sequence = state.sequence + 1
+        const projectionVersion = `projection-${sequence}`
+        const eventId = `event-${sequence}`
+        const changedEntries = projectionEntriesFromCapture(capture)
+        const entries = changedEntries.reduce(
+          (currentEntries, entry) => upsertProjectionEntry(currentEntries, entry),
+          state.entries,
+        )
+        const itemIds = [
+          capture.id,
+          ...capture.extractedItems.map((_, index) => `${capture.id}:child:${index}`),
+        ]
 
-      await writeState(filePath, {
-        ...state,
-        sequence,
-        projectionVersion,
-        eventId,
-        captures: [...state.captures, capture],
-        entries,
+        return {
+          nextState: {
+            ...state,
+            sequence,
+            projectionVersion,
+            eventId,
+            captures: [...state.captures, capture],
+            entries,
+          },
+          result: {
+            itemIds,
+            projectionVersion,
+            eventId,
+            changedTerms: changedEntries.map(entry => entry.normalizedText),
+          },
+        }
       })
-
-      return {
-        itemIds,
-        projectionVersion,
-        eventId,
-        changedTerms: projectionEntriesFromCapture(capture).map(entry => entry.normalizedText),
-      }
     },
 
     async recordQwertyWord(record) {
-      const state = await readState(filePath)
-      const sequence = state.sequence + 1
-      const projectionVersion = `projection-${sequence}`
-      const eventId = `event-${sequence}`
-      const createdAt = record.createdAt ?? new Date().toISOString()
-      const recordWithCreatedAt = {
-        ...record,
-        createdAt,
-      }
-      const previousEntry = state.entries.find(existing =>
-        existing.kind === "word"
-        && existing.normalizedText === normalizeLearningDaemonText(recordWithCreatedAt.word),
-      )
-      const recordsForStreak = [...state.qwertyWordRecords, recordWithCreatedAt]
-      const entry = createProjectionEntryFromQwertyRecord(
-        recordWithCreatedAt,
-        previousEntry,
-        recordsForStreak,
-      )
-      if (!entry) {
-        throw new Error("Qwerty word record text is empty")
-      }
-      const entries = upsertProjectionEntry(state.entries, entry)
-      const itemId = record.id ?? `${entry.normalizedText}:qwerty:${sequence}`
+      return await enqueueMutation((state) => {
+        const sequence = state.sequence + 1
+        const projectionVersion = `projection-${sequence}`
+        const eventId = `event-${sequence}`
+        const createdAt = record.createdAt ?? new Date().toISOString()
+        const recordWithCreatedAt = {
+          ...record,
+          createdAt,
+        }
+        const previousEntry = state.entries.find(existing =>
+          existing.kind === "word"
+          && existing.normalizedText === normalizeLearningDaemonText(recordWithCreatedAt.word),
+        )
+        const recordsForStreak = [...state.qwertyWordRecords, recordWithCreatedAt]
+        const entry = createProjectionEntryFromQwertyRecord(
+          recordWithCreatedAt,
+          previousEntry,
+          recordsForStreak,
+        )
+        if (!entry) {
+          throw new Error("Qwerty word record text is empty")
+        }
+        const entries = upsertProjectionEntry(state.entries, entry)
+        const itemId = record.id ?? `${entry.normalizedText}:qwerty:${sequence}`
 
-      await writeState(filePath, {
-        ...state,
-        sequence,
-        projectionVersion,
-        eventId,
-        qwertyWordRecords: [...state.qwertyWordRecords, recordWithCreatedAt],
-        entries,
+        return {
+          nextState: {
+            ...state,
+            sequence,
+            projectionVersion,
+            eventId,
+            qwertyWordRecords: [...state.qwertyWordRecords, recordWithCreatedAt],
+            entries,
+          },
+          result: {
+            itemId,
+            projectionVersion,
+            eventId,
+            changedTerms: [entry.normalizedText],
+            entry,
+          },
+        }
       })
-
-      return {
-        itemId,
-        projectionVersion,
-        eventId,
-        changedTerms: [entry.normalizedText],
-        entry,
-      }
     },
 
     async recordQwertyChapter(record) {
-      const state = await readState(filePath)
-      const sequence = state.sequence + 1
-      const projectionVersion = `projection-${sequence}`
-      const eventId = `event-${sequence}`
-      const createdAt = record.createdAt ?? new Date().toISOString()
-      const recordId = record.id ?? `${record.dictId}:chapter:${record.chapterIndex}:${sequence}`
-      const recordWithCreatedAt = {
-        ...record,
-        id: recordId,
-        createdAt,
-      }
+      return await enqueueMutation((state) => {
+        const sequence = state.sequence + 1
+        const projectionVersion = `projection-${sequence}`
+        const eventId = `event-${sequence}`
+        const createdAt = record.createdAt ?? new Date().toISOString()
+        const recordId = record.id ?? `${record.dictId}:chapter:${record.chapterIndex}:${sequence}`
+        const recordWithCreatedAt = {
+          ...record,
+          id: recordId,
+          createdAt,
+        }
 
-      await writeState(filePath, {
-        ...state,
-        sequence,
-        projectionVersion,
-        eventId,
-        qwertyChapterRecords: [...state.qwertyChapterRecords, recordWithCreatedAt],
+        return {
+          nextState: {
+            ...state,
+            sequence,
+            projectionVersion,
+            eventId,
+            qwertyChapterRecords: [...state.qwertyChapterRecords, recordWithCreatedAt],
+          },
+          result: { recordId, projectionVersion, eventId },
+        }
       })
-
-      return { recordId, projectionVersion, eventId }
     },
   }
 }
