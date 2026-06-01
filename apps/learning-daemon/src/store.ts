@@ -207,6 +207,10 @@ function createWorkspaceStats(state: LearningDaemonStoreState): LearningWorkspac
     (total, record) => total + record.accuracy,
     0,
   )
+  const durationTotal = state.qwertyWordRecords.reduce(
+    (total, record) => total + record.durationMs,
+    0,
+  )
 
   return {
     captureCount: state.captures.length,
@@ -221,6 +225,9 @@ function createWorkspaceStats(state: LearningDaemonStoreState): LearningWorkspac
     archivedCount: projectionCounts.archived ?? 0,
     averageAccuracy: state.qwertyWordRecords.length
       ? accuracyTotal / state.qwertyWordRecords.length
+      : 0,
+    averageDurationMs: state.qwertyWordRecords.length
+      ? Math.round(durationTotal / state.qwertyWordRecords.length)
       : 0,
   }
 }

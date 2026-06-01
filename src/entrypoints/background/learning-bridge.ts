@@ -3,8 +3,10 @@ import {
   flushLearningBridgeQueue,
   getLearningBridgeStatus,
   getLearningProjectionTerms,
+  getLearningWorkspaceStateFromDaemon,
   syncLearningCaptureSelection,
   syncLearningProjectionCache,
+  syncLearningQwertyWordRecord,
 } from "@/utils/learning-bridge"
 import { logger } from "@/utils/logger"
 import { onMessage, sendMessage } from "@/utils/message"
@@ -61,6 +63,18 @@ export function setupLearningBridgeMessageHandlers(
       await refreshLearningProjectionCacheAfterWrite(tabsApi)
     }
     return result
+  })
+
+  onMessage("syncLearningQwertyWordRecord", async (message) => {
+    const result = await syncLearningQwertyWordRecord(message.data)
+    if (result.status === "synced") {
+      await refreshLearningProjectionCacheAfterWrite(tabsApi)
+    }
+    return result
+  })
+
+  onMessage("getLearningWorkspaceState", async () => {
+    return await getLearningWorkspaceStateFromDaemon()
   })
 
   onMessage("flushLearningBridgeQueue", async () => {

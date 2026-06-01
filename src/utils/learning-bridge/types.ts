@@ -1,6 +1,8 @@
 import type {
   LearningCaptureSelectionRequest,
   LearningDaemonHealthResponse,
+  LearningQwertyWordRecordResponse,
+  LearningWorkspaceStateResponse,
   MasteryProjectionEntry,
 } from "@/utils/learning-contracts"
 
@@ -52,6 +54,18 @@ export interface LearningBridgeProjectionSyncResult {
   projectionVersion?: string
   entryCount: number
   changed: boolean
+  error?: string
+}
+
+export interface LearningBridgeQwertyWordRecordResult {
+  status: "synced" | "offline" | "disabled" | "incompatible"
+  response?: LearningQwertyWordRecordResponse
+  error?: string
+}
+
+export interface LearningBridgeWorkspaceStateResult {
+  status: "ok" | "offline" | "disabled" | "incompatible"
+  state?: LearningWorkspaceStateResponse
   error?: string
 }
 

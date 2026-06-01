@@ -79,6 +79,8 @@ describe("learning bridge background service", () => {
     const client = {
       getHealth: vi.fn(async () => createHealth()),
       captureSelection: vi.fn(),
+      recordQwertyWord: vi.fn(),
+      getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
     }
@@ -99,6 +101,8 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(async () => {
         throw new Error("daemon offline")
       }),
+      recordQwertyWord: vi.fn(),
+      getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
     }
@@ -142,6 +146,8 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(async (capture: LearningCaptureSelectionRequest) => {
         syncedIds.push(capture.id)
       }),
+      recordQwertyWord: vi.fn(),
+      getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
     }
@@ -170,6 +176,8 @@ describe("learning bridge background service", () => {
     const client = {
       getHealth: vi.fn(async () => createHealth()),
       captureSelection: vi.fn(),
+      recordQwertyWord: vi.fn(),
+      getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(async (terms: string[]) => ({
         ok: true as const,
@@ -214,6 +222,8 @@ describe("learning bridge background service", () => {
         throw new Error("daemon offline")
       }),
       captureSelection: vi.fn(),
+      recordQwertyWord: vi.fn(),
+      getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
     }
@@ -248,6 +258,8 @@ describe("learning bridge background service", () => {
         throw new Error("daemon offline")
       }),
       captureSelection: vi.fn(),
+      recordQwertyWord: vi.fn(),
+      getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
     }
@@ -266,6 +278,8 @@ describe("learning bridge background service", () => {
     const client = {
       getHealth: vi.fn(async () => createHealth()),
       captureSelection: vi.fn(),
+      recordQwertyWord: vi.fn(),
+      getWorkspaceState: vi.fn(),
       getProjection: vi.fn(async () => ({
         ok: true as const,
         projectionVersion: "projection-3",
@@ -312,6 +326,8 @@ describe("learning bridge background service", () => {
     const client = {
       getHealth: vi.fn(async () => createHealth()),
       captureSelection: vi.fn(),
+      recordQwertyWord: vi.fn(),
+      getWorkspaceState: vi.fn(),
       getProjection: vi.fn(async () => ({
         ok: true as const,
         projectionVersion: "projection-3",
@@ -333,5 +349,125 @@ describe("learning bridge background service", () => {
       entryCount: 1,
       changed: false,
     })
+  })
+
+  it("records qwerty word results through the connected daemon", async () => {
+    const { syncLearningQwertyWordRecord } = await import("../background-service")
+    const { store } = createStore()
+    const response = {
+      ok: true as const,
+      itemId: "workflow:qwerty:1",
+      projectionVersion: "projection-4",
+      entry: createProjectionEntry({
+        normalizedText: "workflow",
+        status: "review",
+        confidence: 0.72,
+      }),
+    }
+    const client = {
+      getHealth: vi.fn(async () => createHealth()),
+      captureSelection: vi.fn(),
+      recordQwertyWord: vi.fn(async () => response),
+      getWorkspaceState: vi.fn(),
+      getProjection: vi.fn(),
+      getProjectionTerms: vi.fn(),
+    }
+
+    await expect(syncLearningQwertyWordRecord({
+      word: "workflow",
+      input: "workflow",
+      correct: true,
+      accuracy: 1,
+      durationMs: 1200,
+      mistakes: [],
+    }, {
+      store,
+      client,
+    })).resolves.toEqual({
+      status: "synced",
+      response,
+    })
+    expect(client.recordQwertyWord).toHaveBeenCalledWith(expect.objectContaining({
+      word: "workflow",
+      accuracy: 1,
+    }), config)
+  })
+
+  it("does not record qwerty word results when the bridge is disabled", async () => {
+    const { syncLearningQwertyWordRecord } = await import("../background-service")
+    const { store } = createStore()
+    vi.mocked(store.getConfig).mockResolvedValue({
+      ...config,
+      enabled: false,
+    })
+    const client = {
+      getHealth: vi.fn(),
+      captureSelection: vi.fn(),
+      recordQwertyWord: vi.fn(),
+      getWorkspaceState: vi.fn(),
+      getProjection: vi.fn(),
+      getProjectionTerms: vi.fn(),
+    }
+
+    await expect(syncLearningQwertyWordRecord({
+      word: "workflow",
+      input: "workflow",
+      correct: true,
+      accuracy: 1,
+      durationMs: 1200,
+      mistakes: [],
+    }, {
+      store,
+      client,
+    })).resolves.toEqual({
+      status: "disabled",
+    })
+    expect(client.recordQwertyWord).not.toHaveBeenCalled()
+  })
+
+  it("reads workspace state through the connected daemon", async () => {
+    const { getLearningWorkspaceStateFromDaemon } = await import("../background-service")
+    const { store } = createStore()
+    const state = {
+      ok: true as const,
+      projectionVersion: "projection-4",
+      stats: {
+        captureCount: 0,
+        qwertyRecordCount: 2,
+        qwertyChapterRecordCount: 0,
+        correctQwertyRecordCount: 1,
+        projectionEntryCount: 1,
+        unknownCount: 0,
+        learningCount: 1,
+        reviewCount: 0,
+        matureCount: 0,
+        archivedCount: 0,
+        averageAccuracy: 0.75,
+      },
+      captures: [],
+      qwertyWordRecords: [],
+      qwertyChapterRecords: [],
+      qwertyMistakes: {
+        words: [],
+        keys: [],
+      },
+    }
+    const client = {
+      getHealth: vi.fn(async () => createHealth()),
+      captureSelection: vi.fn(),
+      recordQwertyWord: vi.fn(),
+      getWorkspaceState: vi.fn(async () => state),
+      getProjection: vi.fn(),
+      getProjectionTerms: vi.fn(),
+    }
+
+    await expect(getLearningWorkspaceStateFromDaemon({
+      store,
+      client,
+    })).resolves.toEqual({
+      status: "ok",
+      state,
+    })
+    expect(client.getWorkspaceState).toHaveBeenCalledWith(config)
   })
 })

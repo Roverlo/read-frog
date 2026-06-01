@@ -1,17 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const postLearningQwertyWordRecordMock = vi.fn()
-const getLearningBridgeConfigMock = vi.fn()
-const addQwertyRecordMock = vi.fn()
 const upsertLearningItemMock = vi.fn()
 const markLearningItemReviewRatingMock = vi.fn()
+const addQwertyRecordMock = vi.fn()
+const sendMessageMock = vi.fn()
 
-vi.mock("@/utils/learning-bridge/daemon-client", () => ({
-  postLearningQwertyWordRecord: postLearningQwertyWordRecordMock,
-}))
-
-vi.mock("@/utils/learning-bridge/storage", () => ({
-  getLearningBridgeConfig: getLearningBridgeConfigMock,
+vi.mock("@/utils/message", () => ({
+  sendMessage: sendMessageMock,
 }))
 
 vi.mock("@/utils/crypto-polyfill", () => ({
@@ -35,17 +30,8 @@ vi.mock("../items", () => ({
 describe("qwerty-typing", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    getLearningBridgeConfigMock.mockResolvedValue({
-      enabled: true,
-      baseUrl: "http://127.0.0.1:7457",
-    })
-    upsertLearningItemMock.mockResolvedValue({
-      id: "item-1",
-    })
-    markLearningItemReviewRatingMock.mockResolvedValue(undefined)
-    addQwertyRecordMock.mockResolvedValue("record-1")
-    postLearningQwertyWordRecordMock.mockResolvedValue({
-      ok: true,
+    sendMessageMock.mockResolvedValue({
+      status: "synced",
     })
   })
 
@@ -77,7 +63,7 @@ describe("qwerty-typing", () => {
     })).toBe("again")
   })
 
-  it("saves local typing records and mirrors them to the learning daemon", async () => {
+  it("saves typing records through the learning daemon bridge without local Dexie writes", async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-06-01T00:00:00.000Z"))
     try {
@@ -112,31 +98,49 @@ describe("qwerty-typing", () => {
         durationMs: 1234,
       })
 
-      expect(addQwertyRecordMock).toHaveBeenCalledWith(expect.objectContaining({
+      expect(sendMessageMock).toHaveBeenCalledWith("syncLearningQwertyWordRecord", expect.objectContaining({
         id: "record-1",
-        itemId: "item-1",
         word: "cancel",
-        accuracy: 100,
+        input: "cancel",
+        correct: true,
+        accuracy: 1,
+        dictId: "cet4",
+        chapterIndex: 0,
+        wordIndex: 0,
+        definition: "cancel",
+        createdAt: "2026-06-01T00:00:00.000Z",
       }))
-      await vi.waitFor(() => {
-        expect(postLearningQwertyWordRecordMock).toHaveBeenCalledWith(expect.objectContaining({
-          id: "record-1",
-          word: "cancel",
-          input: "cancel",
-          correct: true,
-          accuracy: 1,
-          dictId: "cet4",
-          chapterIndex: 0,
-          wordIndex: 0,
-          createdAt: "2026-06-01T00:00:00.000Z",
-        }), {
-          baseUrl: "http://127.0.0.1:7457",
-          token: undefined,
-        })
-      })
+      expect(addQwertyRecordMock).not.toHaveBeenCalled()
+      expect(upsertLearningItemMock).not.toHaveBeenCalled()
+      expect(markLearningItemReviewRatingMock).not.toHaveBeenCalled()
     }
     finally {
       vi.useRealTimers()
     }
+  })
+
+  it("reads qwerty typing stats from daemon workspace state", async () => {
+    sendMessageMock.mockResolvedValue({
+      status: "ok",
+      state: {
+        stats: {
+          qwertyRecordCount: 3,
+          correctQwertyRecordCount: 2,
+          averageAccuracy: 0.9,
+          averageDurationMs: 2000,
+        },
+        qwertyWordRecords: [],
+      },
+    })
+    const { getQwertyTypingStats } = await import("../qwerty-typing")
+
+    await expect(getQwertyTypingStats()).resolves.toEqual({
+      total: 3,
+      correct: 2,
+      wrong: 1,
+      averageAccuracy: 90,
+      averageDurationMs: 2000,
+    })
+    expect(sendMessageMock).toHaveBeenCalledWith("getLearningWorkspaceState", undefined)
   })
 })

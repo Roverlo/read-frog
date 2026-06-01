@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const onMessageMock = vi.fn()
 const getLearningBridgeStatusMock = vi.fn()
 const syncLearningCaptureSelectionMock = vi.fn()
+const syncLearningQwertyWordRecordMock = vi.fn()
 const flushLearningBridgeQueueMock = vi.fn()
 const getLearningProjectionTermsMock = vi.fn()
+const getLearningWorkspaceStateFromDaemonMock = vi.fn()
 const syncLearningProjectionCacheMock = vi.fn()
 const sendMessageMock = vi.fn()
 const getPageTranslationEnabledMock = vi.fn()
@@ -36,8 +38,10 @@ vi.mock("#imports", () => ({
 vi.mock("@/utils/learning-bridge", () => ({
   getLearningBridgeStatus: getLearningBridgeStatusMock,
   syncLearningCaptureSelection: syncLearningCaptureSelectionMock,
+  syncLearningQwertyWordRecord: syncLearningQwertyWordRecordMock,
   flushLearningBridgeQueue: flushLearningBridgeQueueMock,
   getLearningProjectionTerms: getLearningProjectionTermsMock,
+  getLearningWorkspaceStateFromDaemon: getLearningWorkspaceStateFromDaemonMock,
   syncLearningProjectionCache: syncLearningProjectionCacheMock,
 }))
 
@@ -73,14 +77,19 @@ describe("background learning bridge", () => {
 
     getLearningBridgeStatusMock.mockResolvedValue({ state: "offline" })
     syncLearningCaptureSelectionMock.mockResolvedValue({ status: "queued" })
+    syncLearningQwertyWordRecordMock.mockResolvedValue({ status: "synced" })
     flushLearningBridgeQueueMock.mockResolvedValue({ status: "flushed", flushedCaptureCount: 0 })
     getLearningProjectionTermsMock.mockResolvedValue({ status: "ok", entries: [] })
+    getLearningWorkspaceStateFromDaemonMock.mockResolvedValue({ status: "ok", state: { ok: true } })
     syncLearningProjectionCacheMock.mockResolvedValue({ status: "synced", entryCount: 1, changed: false })
 
     await expect(getRegisteredMessageHandler("getLearningBridgeStatus")({ data: {} })).resolves.toEqual({ state: "offline" })
     await expect(getRegisteredMessageHandler("syncLearningCaptureSelection")({
       data: { text: "workflow" },
     })).resolves.toEqual({ status: "queued" })
+    await expect(getRegisteredMessageHandler("syncLearningQwertyWordRecord")({
+      data: { word: "workflow" },
+    })).resolves.toEqual({ status: "synced" })
     await expect(getRegisteredMessageHandler("flushLearningBridgeQueue")({ data: {} })).resolves.toEqual({
       status: "flushed",
       flushedCaptureCount: 0,
@@ -88,10 +97,16 @@ describe("background learning bridge", () => {
     await expect(getRegisteredMessageHandler("getLearningProjectionTerms")({
       data: { terms: ["workflow"] },
     })).resolves.toEqual({ status: "ok", entries: [] })
+    await expect(getRegisteredMessageHandler("getLearningWorkspaceState")({ data: {} })).resolves.toEqual({
+      status: "ok",
+      state: { ok: true },
+    })
     await expect(getRegisteredMessageHandler("syncLearningProjectionCache")({ data: {} })).resolves.toEqual({ status: "synced", entryCount: 1, changed: false })
 
     expect(syncLearningCaptureSelectionMock).toHaveBeenCalledWith({ text: "workflow" })
+    expect(syncLearningQwertyWordRecordMock).toHaveBeenCalledWith({ word: "workflow" })
     expect(getLearningProjectionTermsMock).toHaveBeenCalledWith(["workflow"])
+    expect(getLearningWorkspaceStateFromDaemonMock).toHaveBeenCalledOnce()
   })
 
   it("syncs projection and refreshes translated tabs after a capture is written to the daemon", async () => {
@@ -148,6 +163,58 @@ describe("background learning bridge", () => {
       status: "queued",
       pendingCaptureCount: 1,
       flushedCaptureCount: 0,
+    })
+
+    expect(syncLearningProjectionCacheMock).not.toHaveBeenCalled()
+    expect(sendMessageMock).not.toHaveBeenCalled()
+  })
+
+  it("syncs projection and refreshes translated tabs after a qwerty word record is written to the daemon", async () => {
+    syncLearningQwertyWordRecordMock.mockResolvedValue({
+      status: "synced",
+    })
+    syncLearningProjectionCacheMock.mockResolvedValue({
+      status: "synced",
+      entryCount: 3,
+      changed: true,
+    })
+    getPageTranslationEnabledMock.mockImplementation(async (tabId: number) => tabId === 42)
+    tabsQueryMock.mockResolvedValue([
+      { id: 41 },
+      { id: 42 },
+    ])
+    sendMessageMock.mockResolvedValue(undefined)
+
+    const { setupLearningBridgeMessageHandlers } = await import("../learning-bridge")
+    setupLearningBridgeMessageHandlers({
+      query: tabsQueryMock,
+    } as never)
+
+    await expect(getRegisteredMessageHandler("syncLearningQwertyWordRecord")({
+      data: { word: "workflow" },
+    })).resolves.toEqual({
+      status: "synced",
+    })
+
+    expect(syncLearningProjectionCacheMock).toHaveBeenCalledOnce()
+    expect(sendMessageMock).toHaveBeenCalledWith("refreshLearningPageTranslation", undefined, 42)
+    expect(sendMessageMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not refresh translated tabs after an offline qwerty word record", async () => {
+    syncLearningQwertyWordRecordMock.mockResolvedValue({
+      status: "offline",
+    })
+
+    const { setupLearningBridgeMessageHandlers } = await import("../learning-bridge")
+    setupLearningBridgeMessageHandlers({
+      query: tabsQueryMock,
+    } as never)
+
+    await expect(getRegisteredMessageHandler("syncLearningQwertyWordRecord")({
+      data: { word: "workflow" },
+    })).resolves.toEqual({
+      status: "offline",
     })
 
     expect(syncLearningProjectionCacheMock).not.toHaveBeenCalled()

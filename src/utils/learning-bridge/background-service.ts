@@ -4,13 +4,18 @@ import type {
   LearningBridgeFlushResult,
   LearningBridgeProjectionSyncResult,
   LearningBridgeProjectionTermsResult,
+  LearningBridgeQwertyWordRecordResult,
   LearningBridgeStatus,
+  LearningBridgeWorkspaceStateResult,
   LearningCaptureQueueStore,
 } from "./types"
 import type {
   LearningCaptureSelectionInput,
   LearningCaptureSelectionRequest,
   LearningDaemonHealthResponse,
+  LearningQwertyWordRecordRequest,
+  LearningQwertyWordRecordResponse,
+  LearningWorkspaceStateResponse,
   MasteryProjectionResponse,
 } from "@/utils/learning-contracts"
 import { getRandomUUID } from "@/utils/crypto-polyfill"
@@ -22,7 +27,9 @@ import {
   getLearningDaemonHealth,
   getLearningMasteryProjection,
   getLearningMasteryProjectionTerms,
+  getLearningWorkspaceState,
   postLearningCaptureSelection,
+  postLearningQwertyWordRecord,
 } from "./daemon-client"
 import {
   enqueuePendingLearningCapture,
@@ -36,6 +43,8 @@ import {
 export interface LearningDaemonBridgeClient {
   getHealth: (config: LearningBridgeConfig) => Promise<LearningDaemonHealthResponse>
   captureSelection: (capture: LearningCaptureSelectionRequest, config: LearningBridgeConfig) => Promise<unknown>
+  recordQwertyWord: (record: LearningQwertyWordRecordRequest, config: LearningBridgeConfig) => Promise<LearningQwertyWordRecordResponse>
+  getWorkspaceState: (config: LearningBridgeConfig) => Promise<LearningWorkspaceStateResponse>
   getProjection: (config: LearningBridgeConfig) => Promise<MasteryProjectionResponse>
   getProjectionTerms: (terms: string[], config: LearningBridgeConfig) => Promise<MasteryProjectionResponse>
 }
@@ -65,6 +74,14 @@ function getDefaultClient(): LearningDaemonBridgeClient {
       token: config.token,
     }),
     captureSelection: (capture, config) => postLearningCaptureSelection(capture, {
+      baseUrl: config.baseUrl,
+      token: config.token,
+    }),
+    recordQwertyWord: (record, config) => postLearningQwertyWordRecord(record, {
+      baseUrl: config.baseUrl,
+      token: config.token,
+    }),
+    getWorkspaceState: config => getLearningWorkspaceState({
       baseUrl: config.baseUrl,
       token: config.token,
     }),
@@ -366,6 +383,75 @@ export async function syncLearningCaptureSelection(
       status: "queued",
       pendingCaptureCount: pendingCaptures.length,
       flushedCaptureCount: flushResult.flushedCaptureCount,
+      error: getErrorMessage(error),
+    }
+  }
+}
+
+export async function syncLearningQwertyWordRecord(
+  record: LearningQwertyWordRecordRequest,
+  deps: LearningBridgeServiceDeps = {},
+): Promise<LearningBridgeQwertyWordRecordResult> {
+  const { store, client } = getDeps(deps)
+  const config = await store.getConfig()
+
+  if (!config.enabled) {
+    return {
+      status: "disabled",
+    }
+  }
+
+  try {
+    const health = await client.getHealth(config)
+    if (getHealthState(health) !== "connected") {
+      return {
+        status: "incompatible",
+        error: `Expected contract ${LEARNING_CONTRACT_VERSION}, got ${health.contractVersion}`,
+      }
+    }
+
+    return {
+      status: "synced",
+      response: await client.recordQwertyWord(record, config),
+    }
+  }
+  catch (error) {
+    return {
+      status: "offline",
+      error: getErrorMessage(error),
+    }
+  }
+}
+
+export async function getLearningWorkspaceStateFromDaemon(
+  deps: LearningBridgeServiceDeps = {},
+): Promise<LearningBridgeWorkspaceStateResult> {
+  const { store, client } = getDeps(deps)
+  const config = await store.getConfig()
+
+  if (!config.enabled) {
+    return {
+      status: "disabled",
+    }
+  }
+
+  try {
+    const health = await client.getHealth(config)
+    if (getHealthState(health) !== "connected") {
+      return {
+        status: "incompatible",
+        error: `Expected contract ${LEARNING_CONTRACT_VERSION}, got ${health.contractVersion}`,
+      }
+    }
+
+    return {
+      status: "ok",
+      state: await client.getWorkspaceState(config),
+    }
+  }
+  catch (error) {
+    return {
+      status: "offline",
       error: getErrorMessage(error),
     }
   }

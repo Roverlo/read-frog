@@ -248,6 +248,7 @@ export const learningWorkspaceStatsSchema = z.object({
   matureCount: z.number().int().nonnegative(),
   archivedCount: z.number().int().nonnegative(),
   averageAccuracy: z.number().min(0).max(1),
+  averageDurationMs: z.number().int().nonnegative().optional(),
 })
 
 export const learningWorkspaceStateResponseSchema = z.object({
