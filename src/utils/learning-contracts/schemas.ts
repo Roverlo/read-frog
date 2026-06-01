@@ -195,6 +195,25 @@ export const learningWorkspaceQwertyChapterRecordSummarySchema = z.object({
   createdAt: z.string().datetime(),
 })
 
+export const learningWorkspaceQwertyMistakeWordSummarySchema = z.object({
+  word: z.string().trim().min(1),
+  count: z.number().int().nonnegative(),
+  lastInput: z.string(),
+  lastAccuracy: z.number().min(0).max(1),
+  lastPracticedAt: z.string().datetime(),
+})
+
+export const learningWorkspaceQwertyMistakeKeySummarySchema = z.object({
+  expected: z.string(),
+  actual: z.string(),
+  count: z.number().int().nonnegative(),
+})
+
+export const learningWorkspaceQwertyMistakesSummarySchema = z.object({
+  words: z.array(learningWorkspaceQwertyMistakeWordSummarySchema),
+  keys: z.array(learningWorkspaceQwertyMistakeKeySummarySchema),
+})
+
 export const learningWorkspaceStatsSchema = z.object({
   captureCount: z.number().int().nonnegative(),
   qwertyRecordCount: z.number().int().nonnegative(),
@@ -217,6 +236,7 @@ export const learningWorkspaceStateResponseSchema = z.object({
   captures: z.array(learningWorkspaceCaptureSummarySchema),
   qwertyWordRecords: z.array(learningWorkspaceQwertyRecordSummarySchema),
   qwertyChapterRecords: z.array(learningWorkspaceQwertyChapterRecordSummarySchema),
+  qwertyMistakes: learningWorkspaceQwertyMistakesSummarySchema,
 })
 
 export const masteryProjectionTermsRequestSchema = z.object({
@@ -242,6 +262,7 @@ export type LearningQwertyWordRecordRequest = z.infer<typeof learningQwertyWordR
 export type LearningQwertyWordRecordResponse = z.infer<typeof learningQwertyWordRecordResponseSchema>
 export type LearningWorkspaceCaptureSummary = z.infer<typeof learningWorkspaceCaptureSummarySchema>
 export type LearningWorkspaceQwertyChapterRecordSummary = z.infer<typeof learningWorkspaceQwertyChapterRecordSummarySchema>
+export type LearningWorkspaceQwertyMistakesSummary = z.infer<typeof learningWorkspaceQwertyMistakesSummarySchema>
 export type LearningWorkspaceQwertyRecordSummary = z.infer<typeof learningWorkspaceQwertyRecordSummarySchema>
 export type LearningWorkspaceStateResponse = z.infer<typeof learningWorkspaceStateResponseSchema>
 export type LearningWorkspaceStats = z.infer<typeof learningWorkspaceStatsSchema>

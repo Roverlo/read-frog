@@ -165,7 +165,7 @@
 
       const chapterCount = state.dictionary?.chapterCount ?? 0;
       setText("chapter-title", state.dictionary
-        ? `${state.dictionary.name} · Chapter ${state.chapterIndex + 1}`
+        ? `${state.dictionary.name} / Chapter ${state.chapterIndex + 1}`
         : "No deck selected");
       setText("chapter-range", state.dictionaryWords.length
         ? `${state.dictionaryWords[0].index + 1}-${state.dictionaryWords[state.dictionaryWords.length - 1].index + 1} of ${state.dictionary?.length ?? state.dictionaryWords.length}`
@@ -264,7 +264,7 @@
             + " / " + Math.round(record.durationMs / 1000) + "s",
         })),
         ...qwertyChapterRecords.slice(0, 4).map((record) => ({
-          title: `${record.dictName ?? record.dictId} · Chapter ${record.chapterIndex + 1}`,
+          title: `${record.dictName ?? record.dictId} / Chapter ${record.chapterIndex + 1}`,
           detail: "chapter"
             + " / " + record.correctCount + "/" + record.wordCount
             + " / " + Math.round(record.accuracy * 100) + "%"
@@ -288,12 +288,53 @@
       }));
     }
 
+    function renderErrorBook() {
+      const errorList = $("error-book-list");
+      const keyList = $("key-mistake-list");
+      const mistakes = state.workspaceState?.qwertyMistakes ?? { words: [], keys: [] };
+      setText("error-count", mistakes.words.length + " words");
+
+      if (!mistakes.words.length) {
+        errorList.replaceChildren(emptyContext("No qwerty mistakes yet."));
+      }
+      else {
+        errorList.replaceChildren(...mistakes.words.slice(0, 5).map((entry) => {
+          const item = document.createElement("div");
+          item.className = "log";
+          const title = document.createElement("strong");
+          title.textContent = entry.word;
+          const detail = document.createElement("span");
+          detail.textContent = "missed "
+            + entry.count
+            + " / last input: "
+            + entry.lastInput
+            + " / "
+            + Math.round(entry.lastAccuracy * 100)
+            + "%";
+          item.append(title, detail);
+          return item;
+        }));
+      }
+
+      keyList.replaceChildren(...mistakes.keys.slice(0, 8).map((entry) => {
+        const item = document.createElement("div");
+        item.className = "key-pair";
+        const expected = document.createElement("strong");
+        expected.textContent = entry.expected || "space";
+        const actual = document.createElement("strong");
+        actual.textContent = entry.actual || "blank";
+        item.append(expected, " -> ", actual, " x", String(entry.count));
+        return item;
+      }));
+    }
+
     function render() {
       renderHealth();
       renderMetrics();
       renderPractice();
       renderProjection();
       renderContext();
+      renderErrorBook();
     }
 
     async function refresh() {

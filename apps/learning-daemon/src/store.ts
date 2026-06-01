@@ -2,6 +2,7 @@ import type {
   LearningCaptureSelectionRequest,
   LearningQwertyChapterRecordRequest,
   LearningQwertyWordRecordRequest,
+  LearningWorkspaceQwertyMistakesSummary,
   LearningWorkspaceStateResponse,
   LearningWorkspaceStats,
   MasteryProjectionEntry,
@@ -219,6 +220,56 @@ function createWorkspaceStats(state: LearningDaemonStoreState): LearningWorkspac
   }
 }
 
+function createQwertyMistakeSummary(
+  records: LearningQwertyWordRecordRequest[],
+): LearningWorkspaceQwertyMistakesSummary {
+  const words = new Map<string, {
+    word: string
+    count: number
+    lastInput: string
+    lastAccuracy: number
+    lastPracticedAt: string
+  }>()
+  const keys = new Map<string, {
+    expected: string
+    actual: string
+    count: number
+  }>()
+
+  for (const record of records) {
+    const createdAt = record.createdAt ?? new Date().toISOString()
+    if (record.mistakes.length > 0 || !record.correct) {
+      const existing = words.get(record.word)
+      words.set(record.word, {
+        word: record.word,
+        count: (existing?.count ?? 0) + 1,
+        lastInput: record.input,
+        lastAccuracy: record.accuracy,
+        lastPracticedAt: createdAt,
+      })
+    }
+
+    for (const mistake of record.mistakes) {
+      const key = `${mistake.expected}\u0000${mistake.actual}`
+      const existing = keys.get(key)
+      keys.set(key, {
+        expected: mistake.expected,
+        actual: mistake.actual,
+        count: (existing?.count ?? 0) + 1,
+      })
+    }
+  }
+
+  return {
+    words: [...words.values()]
+      .sort((a, b) => b.count - a.count || b.lastPracticedAt.localeCompare(a.lastPracticedAt))
+      .slice(0, 12),
+    keys: [...keys.values()]
+      .sort((a, b) => b.count - a.count || a.expected.localeCompare(b.expected) || a.actual.localeCompare(b.actual))
+      .slice(0, 10),
+  }
+}
+
 function createWorkspaceStateResponse(
   state: LearningDaemonStoreState,
 ): LearningWorkspaceStateResponse {
@@ -271,6 +322,7 @@ function createWorkspaceStateResponse(
         accuracy: record.accuracy,
         createdAt: record.createdAt ?? new Date().toISOString(),
       })),
+    qwertyMistakes: createQwertyMistakeSummary(state.qwertyWordRecords),
   }
 }
 

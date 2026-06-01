@@ -470,6 +470,12 @@
       margin-bottom: 10px;
     }
 
+    .context-section + .context-section {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+
     h2 {
       margin: 0;
       font-size: 13px;
@@ -500,6 +506,26 @@
       color: var(--muted);
       font-size: 12px;
       overflow-wrap: anywhere;
+    }
+
+    .key-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .key-pair {
+      border: 1px solid var(--line);
+      background: #f8f8f4;
+      padding: 5px 7px;
+      color: var(--muted);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .key-pair strong {
+      color: var(--ink);
     }
 
     .empty {

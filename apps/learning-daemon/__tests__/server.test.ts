@@ -266,6 +266,51 @@ describe("learning daemon server", () => {
     })
   })
 
+  it("aggregates qwerty mistake words and key pairs for the workspace error book", async () => {
+    await fetch(`${baseUrl}/api/v1/qwerty/records/word`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: new Blob([JSON.stringify({
+        word: "workflow",
+        input: "workflou",
+        correct: false,
+        accuracy: 0.875,
+        durationMs: 1600,
+        dictId: "cet4",
+        chapterIndex: 0,
+        wordIndex: 7,
+        mistakes: [
+          { expected: "w", actual: "u", index: 7 },
+        ],
+        createdAt: "2026-06-01T00:03:00.000Z",
+      })]),
+    })
+
+    const response = await fetch(`${baseUrl}/api/v1/workspace/state`)
+
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      qwertyMistakes: {
+        words: [
+          {
+            word: "workflow",
+            count: 1,
+            lastInput: "workflou",
+            lastAccuracy: 0.875,
+            lastPracticedAt: "2026-06-01T00:03:00.000Z",
+          },
+        ],
+        keys: [
+          {
+            expected: "w",
+            actual: "u",
+            count: 1,
+          },
+        ],
+      },
+    })
+  })
+
   it("serves qwerty dictionaries from the daemon asset directory", async () => {
     const dictionariesResponse = await fetch(`${baseUrl}/api/v1/qwerty/dictionaries`)
 

@@ -120,12 +120,24 @@
       </main>
 
       <aside class="context" aria-label="Learning context">
-        <div class="panel-title">
-          <h2>Reading Inbox</h2>
-          <span class="label" id="inbox-count">0 items</span>
+        <div class="context-section">
+          <div class="panel-title">
+            <h2>Reading Inbox</h2>
+            <span class="label" id="inbox-count">0 items</span>
+          </div>
+          <div id="context-list" class="context-list">
+            <div class="empty">No daemon data loaded yet.</div>
+          </div>
         </div>
-        <div id="context-list" class="context-list">
-          <div class="empty">No daemon data loaded yet.</div>
+        <div class="context-section">
+          <div class="panel-title">
+            <h2>Error Book</h2>
+            <span class="label" id="error-count">0 errors</span>
+          </div>
+          <div id="error-book-list" class="context-list">
+            <div class="empty">No qwerty mistakes yet.</div>
+          </div>
+          <div id="key-mistake-list" class="key-grid" aria-label="Wrong key pairs"></div>
         </div>
       </aside>
     </div>
