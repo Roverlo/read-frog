@@ -1,1262 +1,57 @@
-import type { LLMProviderConfig, ProvidersConfig } from "@/types/config/provider"
-import type { GithubLearningSyncConfig, LearningItem, LearningReviewRating, LearningSettings, ReviewQuestion, VocabQuestion } from "@/types/learning"
+import type { LearningBridgeConfig, LearningBridgeStatus } from "@/utils/learning-bridge"
 import { Icon } from "@iconify/react"
-import { saveAs } from "file-saver"
-import { useAtom, useAtomValue } from "jotai"
+import { useAtom } from "jotai"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/base-ui/badge"
 import { Button } from "@/components/ui/base-ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/base-ui/card"
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/base-ui/empty"
 import { Input } from "@/components/ui/base-ui/input"
-import { Label } from "@/components/ui/base-ui/label"
-import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/base-ui/progress"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/base-ui/radio-group"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/base-ui/select"
 import { Separator } from "@/components/ui/base-ui/separator"
 import { Switch } from "@/components/ui/base-ui/switch"
-import { Textarea } from "@/components/ui/base-ui/textarea"
-import { isLLMProviderConfig } from "@/types/config/provider"
 import { configFieldsAtomMap } from "@/utils/atoms/config"
-import { getRandomUUID } from "@/utils/crypto-polyfill"
-import { db } from "@/utils/db/dexie/db"
-import { extractLearningChildren, generateLearningExplanation, generateReviewMaterial } from "@/utils/learning/ai"
-import { exportLearningData, mergeLearningData } from "@/utils/learning/export"
-import { createPrivateLearningDataRepo, getGithubLearningSyncConfig, pollGithubDeviceToken, requestGithubDeviceCode, saveGithubLearningSyncConfig, syncLearningDataToGithub } from "@/utils/learning/github-sync"
-import { getLearningStats, markLearningItemReviewRating, upsertLearningItem } from "@/utils/learning/items"
-import { getQwertyChapterCount, getQwertyDictResource, getWordMeaning, loadQwertyChapterWords, loadQwertyDictionaryResources, QWERTY_CHAPTER_LENGTH, QWERTY_DICT_RESOURCES, scoreTypingInput } from "@/utils/learning/qwerty-dicts"
-import { getQwertyTypingStats, saveQwertyTypingResult } from "@/utils/learning/qwerty-typing"
-import { getLearningSettings, saveLearningSettings } from "@/utils/learning/settings"
-import { createVocabQuestions, estimateVocabularySize, summarizeWeakLevels } from "@/utils/learning/vocab-test"
+import { getLearningBridgeConfig, saveLearningBridgeConfig } from "@/utils/learning-bridge"
+import { LEARNING_DAEMON_DEFAULT_BASE_URL } from "@/utils/learning-contracts"
+import { sendMessage } from "@/utils/message"
 import { cn } from "@/utils/styles/utils"
 import { PageLayout } from "../../components/page-layout"
 
-interface LearningDashboardData {
-  items: LearningItem[]
-  stats: Awaited<ReturnType<typeof getLearningStats>>
-  settings: LearningSettings
+type StatusTone = "connected" | "offline" | "disabled" | "incompatible" | "unauthorized"
+
+const STATUS_LABEL: Record<StatusTone, string> = {
+  connected: "Connected",
+  offline: "Offline",
+  disabled: "Disabled",
+  incompatible: "Incompatible",
+  unauthorized: "Unauthorized",
 }
 
-interface LearningSettingsData {
-  settings: LearningSettings
-  syncConfig: GithubLearningSyncConfig | undefined
+function getStatusTone(status: LearningBridgeStatus | null, config: LearningBridgeConfig | null): StatusTone {
+  if (status?.state) {
+    return status.state
+  }
+  if (config && !config.enabled) {
+    return "disabled"
+  }
+  return "offline"
 }
 
-const DEFAULT_SYNC = {
-  owner: "Roverlo",
-  repo: "read-frog-learning-data",
-  branch: "main",
-  path: "read-frog-learning-data.json",
-}
-
-const RATING_OPTIONS: Array<{ value: LearningReviewRating, label: string, icon: string }> = [
-  { value: "again", label: "Again", icon: "tabler:rotate-clockwise" },
-  { value: "hard", label: "Hard", icon: "tabler:equal" },
-  { value: "good", label: "Good", icon: "tabler:check" },
-  { value: "easy", label: "Easy", icon: "tabler:chevrons-up" },
-]
-
-function getFirstEnabledLLMProvider(providersConfig: ProvidersConfig): LLMProviderConfig | null {
-  return providersConfig.find((provider): provider is LLMProviderConfig =>
-    isLLMProviderConfig(provider) && provider.enabled,
-  ) ?? null
-}
-
-async function loadLearningDashboardData(): Promise<LearningDashboardData> {
-  const [items, stats, settings] = await Promise.all([
-    db.learningItems.orderBy("updatedAt").reverse().toArray(),
-    getLearningStats(),
-    getLearningSettings(),
-  ])
-  return { items, stats, settings }
-}
-
-async function loadLearningSettingsData(): Promise<LearningSettingsData> {
-  const [settings, syncConfig] = await Promise.all([
-    getLearningSettings(),
-    getGithubLearningSyncConfig(),
-  ])
-  return { settings, syncConfig }
-}
-
-function dueTime(item: LearningItem) {
-  return item.dueAt?.getTime() ?? item.nextReviewAt?.getTime() ?? item.createdAt.getTime()
-}
-
-function getDueItems(items: LearningItem[], settings: LearningSettings) {
-  const now = Date.now()
-  return items
-    .filter(item =>
-      item.status === "learning" || (settings.includeMasteredInReview && item.status === "mastered"),
-    )
-    .filter(item => dueTime(item) <= now)
-    .sort((a, b) => dueTime(a) - dueTime(b))
-}
-
-function StatTile({ label, value, tone, icon }: { label: string, value: number | string, tone: "coral" | "mustard" | "olive" | "ink", icon: string }) {
-  const toneClass = {
-    coral: "border-[#ed6f5c]/30 bg-[#ed6f5c]/10 text-[#8c3328]",
-    mustard: "border-[#e9b94a]/40 bg-[#e9b94a]/10 text-[#70510d]",
-    olive: "border-[#6e7448]/35 bg-[#6e7448]/10 text-[#3f4424]",
-    ink: "border-foreground/15 bg-muted/40 text-foreground",
+function statusClassName(tone: StatusTone) {
+  return {
+    connected: "border-emerald-600/30 bg-emerald-600/10 text-emerald-800 dark:text-emerald-300",
+    offline: "border-amber-600/30 bg-amber-600/10 text-amber-800 dark:text-amber-300",
+    disabled: "border-muted-foreground/30 bg-muted text-muted-foreground",
+    incompatible: "border-orange-600/30 bg-orange-600/10 text-orange-800 dark:text-orange-300",
+    unauthorized: "border-red-600/30 bg-red-600/10 text-red-800 dark:text-red-300",
   }[tone]
-
-  return (
-    <div className={cn("rounded-lg border p-3", toneClass)}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-2xl font-semibold tabular-nums">{value}</div>
-        <Icon icon={icon} className="size-5 opacity-70" />
-      </div>
-      <div className="mt-1 text-xs font-medium uppercase tracking-[0.08em] opacity-75">{label}</div>
-    </div>
-  )
 }
 
-function ItemBadge({ item }: { item: LearningItem }) {
-  const label = item.status === "mastered" ? "已掌握" : item.status === "archived" ? "已归档" : "待学习"
-  return (
-    <Badge
-      variant={item.status === "mastered" ? "accent" : item.status === "archived" ? "outline" : "secondary"}
-      size="sm"
-    >
-      {label}
-    </Badge>
-  )
-}
-
-function DueMeta({ item }: { item: LearningItem }) {
-  const next = item.dueAt ?? item.nextReviewAt
-  return (
-    <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-      <span>
-        {item.maturity ?? "new"}
-      </span>
-      <span>
-        通过
-        {item.consecutivePasses}
-        /2
-      </span>
-      <span>
-        复习
-        {item.reviewCount}
-      </span>
-      {next && (
-        <span>
-          下次
-          {next.toLocaleString()}
-        </span>
-      )}
-    </div>
-  )
-}
-
-function LearningItemRow({
-  item,
-  selected,
-  onSelect,
-  onChanged,
-}: {
-  item: LearningItem
-  selected?: boolean
-  onSelect?: () => void
-  onChanged: () => void
-}) {
-  const markMastered = async () => {
-    await db.learningItems.put({
-      ...item,
-      status: "mastered",
-      consecutivePasses: Math.max(item.consecutivePasses, 2),
-      masteredAt: item.masteredAt ?? new Date(),
-      dueAt: undefined,
-      nextReviewAt: undefined,
-      maturity: "mature",
-      updatedAt: new Date(),
-    })
-    onChanged()
-  }
-
-  const archive = async () => {
-    await db.learningItems.put({
-      ...item,
-      status: "archived",
-      updatedAt: new Date(),
-    })
-    onChanged()
-  }
-
-  return (
-    <div
-      className={cn(
-        "grid gap-3 rounded-lg border border-border/70 bg-card/70 p-3 md:grid-cols-[minmax(0,1fr)_auto]",
-        selected && "border-[#ed6f5c]/50 bg-[#ed6f5c]/5",
-      )}
-    >
-      <button type="button" className="min-w-0 text-left" onClick={onSelect}>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">{item.text}</span>
-          <ItemBadge item={item} />
-          <Badge variant="outline" size="sm">{item.kind}</Badge>
-          {item.parentId && <Badge variant="outline" size="sm">抽取</Badge>}
-        </div>
-        {item.explanation?.meaningZh && (
-          <p className="mt-2 text-sm text-muted-foreground">{item.explanation.meaningZh}</p>
-        )}
-        {item.context && (
-          <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{item.context}</p>
-        )}
-        <div className="mt-2">
-          <DueMeta item={item} />
-        </div>
-      </button>
-      <div className="flex items-start gap-2">
-        {item.status !== "mastered" && (
-          <Button type="button" size="sm" variant="outline" onClick={markMastered} title="标记掌握">
-            <Icon icon="tabler:check" />
-          </Button>
-        )}
-        {item.status !== "archived" && (
-          <Button type="button" size="sm" variant="ghost" onClick={archive} title="归档">
-            <Icon icon="tabler:archive" />
-          </Button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function ReviewQueue({
-  items,
-  selectedId,
-  onSelect,
-}: {
-  items: LearningItem[]
-  selectedId?: string
-  onSelect: (item: LearningItem) => void
-}) {
-  return (
-    <Card className="rounded-lg">
-      <CardHeader>
-        <CardTitle>今日队列</CardTitle>
-        <CardDescription>按 FSRS 到期时间排序。</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-2">
-        {items.length === 0
-          ? (
-              <Empty className="border p-6">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <Icon icon="tabler:calendar-check" />
-                  </EmptyMedia>
-                  <EmptyTitle>暂无到期内容</EmptyTitle>
-                  <EmptyDescription>可以先做词测或从网页划词加入待学习。</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            )
-          : items.map(item => (
-              <button
-                key={item.id}
-                type="button"
-                className={cn("rounded-lg border p-3 text-left text-sm hover:bg-muted/50", selectedId === item.id && "border-[#ed6f5c]/50 bg-[#ed6f5c]/5")}
-                onClick={() => onSelect(item)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{item.text}</span>
-                  <Badge variant="outline" size="sm">{item.kind}</Badge>
-                </div>
-                <div className="mt-2">
-                  <DueMeta item={item} />
-                </div>
-              </button>
-            ))}
-      </CardContent>
-    </Card>
-  )
-}
-
-function VocabTestPanel({ providerConfig, onChanged }: { providerConfig: LLMProviderConfig | null, onChanged: () => void }) {
-  const [questions, setQuestions] = useState<VocabQuestion[]>([])
-  const [answers, setAnswers] = useState<Record<string, string>>({})
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [result, setResult] = useState<{ correct: number, total: number, estimated: number, weakLevels: string[] } | null>(null)
-
-  const startTest = () => {
-    setQuestions(createVocabQuestions(20))
-    setAnswers({})
-    setResult(null)
-  }
-
-  const submit = async () => {
-    setIsSubmitting(true)
-    try {
-      const correctQuestionIds = new Set(
-        questions
-          .filter(question => answers[question.id] === question.answer)
-          .map(question => question.id),
-      )
-      const estimated = estimateVocabularySize(questions, correctQuestionIds)
-      const weakLevels = summarizeWeakLevels(questions, correctQuestionIds)
-      const now = new Date()
-      await db.vocabTestSessions.add({
-        id: getRandomUUID(),
-        createdAt: now,
-        updatedAt: now,
-        totalCount: questions.length,
-        correctCount: correctQuestionIds.size,
-        estimatedVocabulary: estimated,
-        questions,
-        answers: questions.map(question => ({
-          questionId: question.id,
-          selectedAnswer: answers[question.id] ?? "",
-          correct: correctQuestionIds.has(question.id),
-        })),
-      })
-
-      for (const question of questions) {
-        const correct = correctQuestionIds.has(question.id)
-        const explanation = correct
-          ? { meaningZh: question.answer, examples: [] }
-          : await generateLearningExplanation({
-              text: question.word,
-              context: `词汇量测试中未选中正确释义：${question.answer}`,
-              providerConfig,
-            })
-        await upsertLearningItem({
-          text: question.word,
-          kind: "word",
-          status: correct ? "mastered" : "learning",
-          source: "vocab-test",
-          explanation,
-          tags: [`level:${question.level}`],
-        })
-      }
-
-      setResult({ correct: correctQuestionIds.size, total: questions.length, estimated, weakLevels })
-      onChanged()
-      toast.success("词汇量测试已保存")
-    }
-    catch (error) {
-      toast.error("词汇量测试保存失败", {
-        description: error instanceof Error ? error.message : undefined,
-      })
-    }
-    finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  return (
-    <Card className="rounded-lg">
-      <CardHeader>
-        <CardTitle>词汇量测试</CardTitle>
-        <CardDescription>20 题分级抽样，答错进入待学习，答对进入已掌握。</CardDescription>
-        <CardAction>
-          <Button type="button" size="sm" onClick={startTest}>
-            <Icon icon="tabler:cards" />
-            开始
-          </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {questions.length === 0
-          ? (
-              <Empty className="border">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <Icon icon="tabler:cards" />
-                  </EmptyMedia>
-                  <EmptyTitle>开始一次分级词测</EmptyTitle>
-                  <EmptyDescription>A1-C1 混合抽题，结果会自动更新知识库。</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            )
-          : (
-              <>
-                <Progress value={(Object.keys(answers).length / questions.length) * 100}>
-                  <ProgressLabel>完成进度</ProgressLabel>
-                  <ProgressValue>{() => `${Object.keys(answers).length}/${questions.length}`}</ProgressValue>
-                </Progress>
-                <div className="grid gap-3">
-                  {questions.map((question, index) => (
-                    <div key={question.id} className="rounded-lg border p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <span className="text-xs text-muted-foreground">
-                            Q
-                            {index + 1}
-                          </span>
-                          <div className="text-lg font-semibold">{question.word}</div>
-                        </div>
-                        <Badge variant="outline">{question.level}</Badge>
-                      </div>
-                      <RadioGroup
-                        className="mt-3 grid gap-2 md:grid-cols-2"
-                        value={answers[question.id] ?? ""}
-                        onValueChange={(value: unknown) => setAnswers(prev => ({ ...prev, [question.id]: String(value) }))}
-                      >
-                        {question.choices.map(choice => (
-                          <label key={choice} className="flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm hover:bg-muted/50">
-                            <RadioGroupItem value={choice} />
-                            <span>{choice}</span>
-                          </label>
-                        ))}
-                      </RadioGroup>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  {result
-                    ? (
-                        <div className="text-sm">
-                          答对
-                          {" "}
-                          {result.correct}
-                          /
-                          {result.total}
-                          ，估算词汇量约
-                          {" "}
-                          {result.estimated.toLocaleString()}
-                          。薄弱等级：
-                          {" "}
-                          {result.weakLevels.length > 0 ? result.weakLevels.join(", ") : "暂无"}
-                        </div>
-                      )
-                    : <span />}
-                  <Button
-                    type="button"
-                    disabled={Object.keys(answers).length < questions.length || isSubmitting}
-                    onClick={submit}
-                  >
-                    {isSubmitting ? "保存中..." : "提交测试"}
-                  </Button>
-                </div>
-              </>
-            )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function ManualAddPanel({ providerConfig, onChanged }: { providerConfig: LLMProviderConfig | null, onChanged: () => void }) {
-  const [text, setText] = useState("")
-  const [context, setContext] = useState("")
-  const [isSaving, setIsSaving] = useState(false)
-
-  const handleSave = async () => {
-    setIsSaving(true)
-    try {
-      const explanation = await generateLearningExplanation({ text, context, providerConfig })
-      const parent = await upsertLearningItem({
-        text,
-        context,
-        source: "manual",
-        explanation,
-      })
-      const children = await extractLearningChildren({ text, context, providerConfig })
-      await Promise.all(children.map(child => upsertLearningItem({
-        text: child.text,
-        kind: child.kind,
-        context,
-        source: "manual",
-        parentId: parent.id,
-        explanation: child.explanation,
-        tags: child.tags,
-      })))
-      setText("")
-      setContext("")
-      onChanged()
-      toast.success(children.length > 0 ? `已加入待学习库，并抽取 ${children.length} 个重点` : "已加入待学习库")
-    }
-    catch (error) {
-      toast.error("保存失败", {
-        description: error instanceof Error ? error.message : undefined,
-      })
-    }
-    finally {
-      setIsSaving(false)
-    }
-  }
-
-  return (
-    <Card className="rounded-lg">
-      <CardHeader>
-        <CardTitle>快速加入</CardTitle>
-        <CardDescription>保存单词、短语、整句或段落；AI 可自动抽取子条目。</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        <Textarea value={text} onChange={event => setText(event.target.value)} placeholder="输入英文内容" />
-        <Textarea value={context} onChange={event => setContext(event.target.value)} placeholder="可选：上下文或来源片段" />
-        <div className="flex justify-end">
-          <Button type="button" disabled={!text.trim() || isSaving} onClick={handleSave}>
-            {isSaving ? "生成中..." : "加入"}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function ReviewPanel({
-  items,
-  selectedItem,
-  providerConfig,
-  settings,
-  onChanged,
-}: {
-  items: LearningItem[]
-  selectedItem: LearningItem | undefined
-  providerConfig: LLMProviderConfig | null
-  settings: LearningSettings
-  onChanged: () => void
-}) {
-  const reviewItems = useMemo(() => items.slice(0, 6), [items])
-  const [sessionId, setSessionId] = useState<string | null>(null)
-  const [title, setTitle] = useState("")
-  const [material, setMaterial] = useState("")
-  const [materialZh, setMaterialZh] = useState("")
-  const [questions, setQuestions] = useState<ReviewQuestion[]>([])
-  const [answers, setAnswers] = useState<Record<string, string>>({})
-  const [ratings, setRatings] = useState<Record<string, LearningReviewRating>>({})
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-
-  const generate = async () => {
-    if (reviewItems.length === 0) {
-      toast.info("今日暂无到期内容")
-      return
-    }
-
-    setIsGenerating(true)
-    try {
-      const generated = await generateReviewMaterial({ items: reviewItems, providerConfig, mode: settings.reviewMode })
-      const now = new Date()
-      const nextSessionId = getRandomUUID()
-      await db.reviewSessions.add({
-        id: nextSessionId,
-        createdAt: now,
-        updatedAt: now,
-        itemIds: reviewItems.map(item => item.id),
-        title: generated.title,
-        material: generated.material,
-        materialZh: generated.materialZh,
-        questions: generated.questions,
-        answers: [],
-        passed: false,
-      })
-
-      setSessionId(nextSessionId)
-      setTitle(generated.title)
-      setMaterial(generated.material)
-      setMaterialZh(generated.materialZh ?? "")
-      setQuestions(generated.questions)
-      setAnswers({})
-      setRatings({})
-      onChanged()
-    }
-    catch (error) {
-      toast.error("AI 复习材料生成失败", {
-        description: error instanceof Error ? error.message : undefined,
-      })
-    }
-    finally {
-      setIsGenerating(false)
-    }
-  }
-
-  const submit = async () => {
-    if (!sessionId) {
-      return
-    }
-    setIsSubmitting(true)
-    try {
-      const normalizedAnswers = questions.map(question => ({
-        questionId: question.id,
-        selectedAnswer: answers[question.id] ?? "",
-        correct: answers[question.id] === question.answer,
-      }))
-      const correctCount = normalizedAnswers.filter(answer => answer.correct).length
-      const passed = questions.length > 0 && correctCount / questions.length >= 0.75
-      await db.reviewSessions.update(sessionId, {
-        answers: normalizedAnswers,
-        passed,
-        updatedAt: new Date(),
-      })
-
-      await Promise.all(reviewItems.map((item) => {
-        const rating = ratings[item.id] ?? (passed ? "good" : "again")
-        return markLearningItemReviewRating(item.id, rating, {
-          sessionId,
-          desiredRetention: settings.desiredRetention,
-        })
-      }))
-      onChanged()
-      toast.success(passed ? "复习通过，FSRS 已更新下次复习时间" : "本次未通过，已安排更近复习")
-    }
-    catch (error) {
-      toast.error("复习结果保存失败", {
-        description: error instanceof Error ? error.message : undefined,
-      })
-    }
-    finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  return (
-    <Card className="rounded-lg">
-      <CardHeader>
-        <CardTitle>AI 复习</CardTitle>
-        <CardDescription>
-          只使用今日到期内容生成
-          {settings.reviewMode === "dialogue" ? "对话" : "短文"}
-          和小测。
-        </CardDescription>
-        <CardAction>
-          <Button type="button" size="sm" disabled={isGenerating || reviewItems.length === 0} onClick={generate}>
-            <Icon icon="tabler:sparkles" />
-            {isGenerating ? "生成中..." : "生成"}
-          </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-wrap gap-2">
-          {reviewItems.length === 0
-            ? <span className="text-sm text-muted-foreground">今日暂无到期内容。</span>
-            : reviewItems.map(item => <Badge key={item.id} variant={selectedItem?.id === item.id ? "secondary" : "outline"}>{item.text}</Badge>)}
-        </div>
-        {material && (
-          <>
-            <Separator />
-            <div>
-              <h3 className="font-medium">{title}</h3>
-              {materialZh && <p className="mt-1 text-sm text-muted-foreground">{materialZh}</p>}
-            </div>
-            <div className="whitespace-pre-wrap rounded-lg border bg-muted/30 p-4 text-sm leading-7">{material}</div>
-            <div className="grid gap-3">
-              {questions.map((question, index) => (
-                <div key={question.id} className="rounded-lg border p-4">
-                  <div className="font-medium">
-                    Q
-                    {index + 1}
-                    .
-                    {question.prompt}
-                  </div>
-                  <RadioGroup
-                    className="mt-3 grid gap-2 md:grid-cols-2"
-                    value={answers[question.id] ?? ""}
-                    onValueChange={(value: unknown) => setAnswers(prev => ({ ...prev, [question.id]: String(value) }))}
-                  >
-                    {question.choices.map(choice => (
-                      <label key={choice} className="flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm hover:bg-muted/50">
-                        <RadioGroupItem value={choice} />
-                        <span>{choice}</span>
-                      </label>
-                    ))}
-                  </RadioGroup>
-                </div>
-              ))}
-            </div>
-            <div className="grid gap-2 rounded-lg border p-3">
-              <div className="text-sm font-medium">手动校准记忆强度</div>
-              {reviewItems.map(item => (
-                <div key={item.id} className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm">{item.text}</span>
-                  <div className="flex gap-1">
-                    {RATING_OPTIONS.map(option => (
-                      <Button
-                        key={option.value}
-                        type="button"
-                        size="sm"
-                        variant={(ratings[item.id] ?? "good") === option.value ? "secondary" : "ghost"}
-                        onClick={() => setRatings(prev => ({ ...prev, [item.id]: option.value }))}
-                      >
-                        <Icon icon={option.icon} />
-                        {option.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                disabled={questions.length === 0 || Object.keys(answers).length < questions.length || isSubmitting}
-                onClick={submit}
-              >
-                {isSubmitting ? "保存中..." : "提交"}
-              </Button>
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function QwertyTypingPanel({ onChanged }: { onChanged: () => void }) {
-  const [dictionaries, setDictionaries] = useState(QWERTY_DICT_RESOURCES)
-  const [dictId, setDictId] = useState(QWERTY_DICT_RESOURCES[0]!.id)
-  const dict = useMemo(() => getQwertyDictResource(dictId, dictionaries), [dictId, dictionaries])
-  const [chapterIndex, setChapterIndex] = useState(0)
-  const [chapterWords, setChapterWords] = useState<Awaited<ReturnType<typeof loadQwertyChapterWords>>>([])
-  const [wordCursor, setWordCursor] = useState(0)
-  const [typedText, setTypedText] = useState("")
-  const [startedAt, setStartedAt] = useState<number | null>(null)
-  const [lastResult, setLastResult] = useState<ReturnType<typeof scoreTypingInput> | null>(null)
-  const [stats, setStats] = useState<Awaited<ReturnType<typeof getQwertyTypingStats>> | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
-
-  const chapterCount = getQwertyChapterCount(dict)
-  const currentWord = chapterWords[wordCursor]
-  const progressValue = chapterWords.length === 0
-    ? 0
-    : (Math.min(wordCursor + 1, chapterWords.length) / chapterWords.length) * 100
-
-  const refreshStats = useCallback(async () => {
-    setStats(await getQwertyTypingStats())
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    void loadQwertyDictionaryResources()
-      .then((loadedDictionaries) => {
-        if (cancelled || loadedDictionaries.length === 0) {
-          return
-        }
-        setDictionaries(loadedDictionaries)
-        if (!loadedDictionaries.some(resource => resource.id === dictId)) {
-          setDictId(loadedDictionaries[0]!.id)
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          toast.error("Qwerty dictionary manifest failed to load", {
-            description: error instanceof Error ? error.message : undefined,
-          })
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [dictId])
-
-  useEffect(() => {
-    let cancelled = false
-    setIsLoading(true)
-    setLastResult(null)
-    setTypedText("")
-    setStartedAt(null)
-    setWordCursor(0)
-    void loadQwertyChapterWords(dict, chapterIndex)
-      .then((loadedWords) => {
-        if (!cancelled) {
-          setChapterWords(loadedWords)
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setChapterWords([])
-          toast.error("词库加载失败", {
-            description: error instanceof Error ? error.message : undefined,
-          })
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoading(false)
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [chapterIndex, dict])
-
-  useEffect(() => {
-    void refreshStats()
-  }, [refreshStats])
-
-  useEffect(() => {
-    if (chapterIndex >= chapterCount) {
-      setChapterIndex(0)
-    }
-  }, [chapterCount, chapterIndex])
-
-  useEffect(() => {
-    setWordCursor(0)
-    setTypedText("")
-    setStartedAt(null)
-    setLastResult(null)
-  }, [chapterIndex, dictId])
-
-  const submit = async () => {
-    if (!currentWord || !typedText.trim()) {
-      return
-    }
-
-    const result = scoreTypingInput(currentWord.name, typedText, { ignoreCase: true })
-    const durationMs = startedAt ? Date.now() - startedAt : 0
-    setLastResult(result)
-    setIsSaving(true)
-    try {
-      await saveQwertyTypingResult({
-        dict,
-        word: currentWord,
-        typedText,
-        result,
-        chapterIndex,
-        durationMs,
-      })
-      await refreshStats()
-      onChanged()
-      toast.success(result.correct ? "输入正确，已同步到学习进度" : "已记录错词并安排复习")
-      setTypedText("")
-      setStartedAt(null)
-      setWordCursor(cursor => Math.min(cursor + 1, Math.max(chapterWords.length - 1, 0)))
-    }
-    catch (error) {
-      toast.error("练习记录保存失败", {
-        description: error instanceof Error ? error.message : undefined,
-      })
-    }
-    finally {
-      setIsSaving(false)
-    }
-  }
-
-  const restartChapter = () => {
-    setWordCursor(0)
-    setTypedText("")
-    setStartedAt(null)
-    setLastResult(null)
-  }
-
-  const nextWord = () => {
-    setWordCursor(cursor => Math.min(cursor + 1, Math.max(chapterWords.length - 1, 0)))
-    setTypedText("")
-    setStartedAt(null)
-    setLastResult(null)
-  }
-
-  const prevWord = () => {
-    setWordCursor(cursor => Math.max(cursor - 1, 0))
-    setTypedText("")
-    setStartedAt(null)
-    setLastResult(null)
-  }
-
-  return (
-    <Card className="rounded-lg">
-      <CardHeader>
-        <CardTitle>Qwerty 键盘练习</CardTitle>
-        <CardDescription>精选 qwerty-learner 词库，练打字肌肉记忆，并写入陪读蛙学习进度。</CardDescription>
-        <CardAction>
-          <Button type="button" size="sm" variant="outline" onClick={restartChapter}>
-            <Icon icon="tabler:rotate-clockwise" />
-            重来
-          </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_160px]">
-          <Select value={dictId} onValueChange={value => setDictId(String(value))}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {dictionaries.map(resource => (
-                <SelectItem key={resource.id} value={resource.id}>
-                  {resource.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={String(chapterIndex)} onValueChange={value => setChapterIndex(Number(value) || 0)}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Array.from({ length: chapterCount }, (_, index) => (
-                <SelectItem key={index} value={String(index)}>
-                  第
-                  {index + 1}
-                  章
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-4">
-          <StatTile label="练习次数" value={stats?.total ?? 0} tone="ink" icon="tabler:keyboard" />
-          <StatTile label="正确" value={stats?.correct ?? 0} tone="olive" icon="tabler:checks" />
-          <StatTile label="平均准确率" value={`${stats?.averageAccuracy ?? 0}%`} tone="mustard" icon="tabler:percentage" />
-          <StatTile label="平均耗时" value={`${Math.round((stats?.averageDurationMs ?? 0) / 1000)}s`} tone="coral" icon="tabler:clock" />
-        </div>
-
-        <Progress value={progressValue}>
-          <ProgressLabel>
-            {dict.name}
-            {" "}
-            第
-            {chapterIndex + 1}
-            章
-          </ProgressLabel>
-          <ProgressValue>{() => `${Math.min(wordCursor + 1, chapterWords.length || 1)}/${chapterWords.length || QWERTY_CHAPTER_LENGTH}`}</ProgressValue>
-        </Progress>
-
-        {isLoading
-          ? <div className="rounded-lg border p-6 text-sm text-muted-foreground">词库加载中...</div>
-          : !currentWord
-              ? (
-                  <Empty className="border">
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <Icon icon="tabler:book-off" />
-                      </EmptyMedia>
-                      <EmptyTitle>本章没有词条</EmptyTitle>
-                      <EmptyDescription>换一个章节或词库再试。</EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                )
-              : (
-                  <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="break-words text-4xl font-semibold leading-tight tracking-normal">{currentWord.name}</div>
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                          {currentWord.usphone && (
-                            <Badge variant="outline">
-                              US
-                              {" "}
-                              {currentWord.usphone}
-                            </Badge>
-                          )}
-                          {currentWord.ukphone && (
-                            <Badge variant="outline">
-                              UK
-                              {" "}
-                              {currentWord.ukphone}
-                            </Badge>
-                          )}
-                          <Badge variant="secondary">{dict.category}</Badge>
-                        </div>
-                      </div>
-                      <div className="text-right text-sm text-muted-foreground">
-                        #
-                        {currentWord.index + 1}
-                      </div>
-                    </div>
-                    <p className="text-sm leading-6 text-muted-foreground">{getWordMeaning(currentWord) || "暂无释义"}</p>
-                    <form
-                      className="grid gap-2"
-                      onSubmit={(event) => {
-                        event.preventDefault()
-                        void submit()
-                      }}
-                    >
-                      <Input
-                        value={typedText}
-                        onChange={(event) => {
-                          setTypedText(event.target.value)
-                          setStartedAt(current => current ?? Date.now())
-                        }}
-                        placeholder="输入上方英文，回车提交"
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                      />
-                      {lastResult && (
-                        <div className={cn("rounded-lg border p-3 text-sm", lastResult.correct ? "border-[#6e7448]/35 bg-[#6e7448]/10 text-[#3f4424]" : "border-[#ed6f5c]/30 bg-[#ed6f5c]/10 text-[#8c3328]")}>
-                          {lastResult.correct
-                            ? "上一题正确。"
-                            : (
-                                <>
-                                  上一题准确率
-                                  {" "}
-                                  {lastResult.accuracy}
-                                  %，错误位置：
-                                  {" "}
-                                  {lastResult.mistakes.slice(0, 4).map(mistake => `${mistake.index + 1}:${mistake.actual || "空"}→${mistake.expected || "空"}`).join(" / ")}
-                                </>
-                              )}
-                        </div>
-                      )}
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex gap-2">
-                          <Button type="button" variant="outline" size="sm" disabled={wordCursor === 0} onClick={prevWord}>
-                            <Icon icon="tabler:arrow-left" />
-                            上一个
-                          </Button>
-                          <Button type="button" variant="outline" size="sm" disabled={wordCursor >= chapterWords.length - 1} onClick={nextWord}>
-                            下一个
-                            <Icon icon="tabler:arrow-right" />
-                          </Button>
-                        </div>
-                        <Button type="submit" disabled={!typedText.trim() || isSaving}>
-                          {isSaving ? "保存中..." : "提交"}
-                        </Button>
-                      </div>
-                    </form>
-                  </div>
-                )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function LibraryPanel({
-  items,
-  selectedId,
-  onSelect,
-  onChanged,
-}: {
-  items: LearningItem[]
-  selectedId?: string
-  onSelect: (item: LearningItem) => void
-  onChanged: () => void
-}) {
-  const [search, setSearch] = useState("")
-  const [status, setStatus] = useState<LearningItem["status"] | "all">("learning")
-  const [kind, setKind] = useState<LearningItem["kind"] | "all">("all")
-  const [source, setSource] = useState<LearningItem["source"] | "all">("all")
-  const [dueOnly, setDueOnly] = useState(false)
-
-  const filtered = items.filter((item) => {
-    const matchesSearch = !search || item.text.toLowerCase().includes(search.toLowerCase()) || item.explanation?.meaningZh?.includes(search)
-    const matchesStatus = status === "all" || item.status === status
-    const matchesKind = kind === "all" || item.kind === kind
-    const matchesSource = source === "all" || item.source === source
-    const matchesDue = !dueOnly || dueTime(item) <= Date.now()
-    return matchesSearch && matchesStatus && matchesKind && matchesSource && matchesDue
-  })
-
-  return (
-    <Card className="rounded-lg">
-      <CardHeader>
-        <CardTitle>知识库</CardTitle>
-        <CardDescription>筛选、检索和管理所有学习内容。</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto]">
-          <Input value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索英文或中文解释" />
-          <Select value={status} onValueChange={value => setStatus(value as typeof status)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部状态</SelectItem>
-              <SelectItem value="learning">待学习</SelectItem>
-              <SelectItem value="mastered">已掌握</SelectItem>
-              <SelectItem value="archived">已归档</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={kind} onValueChange={value => setKind(value as typeof kind)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部类型</SelectItem>
-              <SelectItem value="word">单词</SelectItem>
-              <SelectItem value="phrase">短语</SelectItem>
-              <SelectItem value="sentence">句子</SelectItem>
-              <SelectItem value="paragraph">段落</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={source} onValueChange={value => setSource(value as typeof source)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部来源</SelectItem>
-              <SelectItem value="vocab-test">词测</SelectItem>
-              <SelectItem value="selection">划词</SelectItem>
-              <SelectItem value="manual">手动</SelectItem>
-              <SelectItem value="review">复习</SelectItem>
-            </SelectContent>
-          </Select>
-          <label className="flex items-center justify-end gap-2 rounded-lg border px-3 text-sm">
-            <Switch checked={dueOnly} onCheckedChange={setDueOnly} />
-            到期
-          </label>
-        </div>
-        <div className="grid gap-3">
-          {filtered.length === 0
-            ? (
-                <Empty className="border">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <Icon icon="tabler:database-search" />
-                    </EmptyMedia>
-                    <EmptyTitle>没有匹配内容</EmptyTitle>
-                    <EmptyDescription>调整筛选条件或添加新内容。</EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              )
-            : filtered.map(item => (
-                <LearningItemRow
-                  key={item.id}
-                  item={item}
-                  selected={item.id === selectedId}
-                  onSelect={() => onSelect(item)}
-                  onChanged={onChanged}
-                />
-              ))}
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function DetailPanel({ item }: { item?: LearningItem }) {
-  return (
-    <Card className="rounded-lg">
-      <CardHeader>
-        <CardTitle>详情</CardTitle>
-        <CardDescription>解释、来源和复习状态。</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {!item
-          ? (
-              <Empty className="border">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <Icon icon="tabler:focus-centered" />
-                  </EmptyMedia>
-                  <EmptyTitle>选择一条内容</EmptyTitle>
-                  <EmptyDescription>查看 AI 解释和来源上下文。</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            )
-          : (
-              <div className="space-y-4">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-lg font-semibold">{item.text}</h3>
-                    <ItemBadge item={item} />
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {item.kind}
-                    {" "}
-                    ·
-                    {" "}
-                    {item.source}
-                  </p>
-                </div>
-                {item.explanation?.meaningZh && (
-                  <div>
-                    <div className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">中文解释</div>
-                    <p className="mt-1 text-sm leading-6">{item.explanation.meaningZh}</p>
-                  </div>
-                )}
-                {item.explanation?.notes && (
-                  <div>
-                    <div className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">易混点</div>
-                    <p className="mt-1 text-sm leading-6">{item.explanation.notes}</p>
-                  </div>
-                )}
-                {item.context && (
-                  <div>
-                    <div className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">上下文</div>
-                    <p className="mt-1 whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 text-sm leading-6">{item.context}</p>
-                  </div>
-                )}
-                {item.sourceUrl && (
-                  <a className="inline-flex items-center gap-1 text-sm underline" href={item.sourceUrl} target="_blank" rel="noopener noreferrer">
-                    <Icon icon="tabler:external-link" />
-                    打开来源
-                  </a>
-                )}
-                <Separator />
-                <DueMeta item={item} />
-              </div>
-            )}
-      </CardContent>
-    </Card>
-  )
-}
-
-export function LearningPage() {
-  const providersConfig = useAtomValue(configFieldsAtomMap.providersConfig)
-  const providerConfig = useMemo(() => getFirstEnabledLLMProvider(providersConfig), [providersConfig])
-  const [data, setData] = useState<LearningDashboardData | null>(null)
-  const [selectedId, setSelectedId] = useState<string | undefined>()
-  const [isLoading, setIsLoading] = useState(true)
-
-  const refresh = useCallback(async () => {
-    const next = await loadLearningDashboardData()
-    setData(next)
-    setIsLoading(false)
-    setSelectedId(current => current ?? next.items[0]?.id)
-  }, [])
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-
-  const stats = data?.stats ?? { learning: 0, mastered: 0, archived: 0, total: 0 }
-  const settings = data?.settings
-  const items = data?.items ?? []
-  const dueItems = settings ? getDueItems(items, settings) : []
-  const selectedItem = items.find(item => item.id === selectedId)
-
-  return (
-    <PageLayout title="学习工作台" innerClassName="flex flex-col p-5 gap-4">
-      <div className="grid gap-3 md:grid-cols-5">
-        <StatTile label="今日到期" value={dueItems.length} tone="coral" icon="tabler:calendar-time" />
-        <StatTile label="待学习" value={stats.learning} tone="mustard" icon="tabler:book-2" />
-        <StatTile label="已掌握" value={stats.mastered} tone="olive" icon="tabler:circle-check" />
-        <StatTile label="总知识" value={stats.total} tone="ink" icon="tabler:database" />
-        <StatTile label="保留率" value={settings ? `${Math.round(settings.desiredRetention * 100)}%` : "90%"} tone="ink" icon="tabler:target" />
-      </div>
-
-      {!providerConfig && (
-        <div className="rounded-lg border border-[#e9b94a]/40 bg-[#e9b94a]/10 p-3 text-sm text-[#70510d]">
-          尚未启用 LLM 提供商。词测和本地保存可用，AI 解释与复习会使用简化结果。
-        </div>
-      )}
-
-      {isLoading
-        ? <div className="rounded-lg border p-6 text-sm text-muted-foreground">加载中...</div>
-        : (
-            <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_340px]">
-              <div className="grid content-start gap-4">
-                <ReviewQueue items={dueItems} selectedId={selectedId} onSelect={item => setSelectedId(item.id)} />
-                <ManualAddPanel providerConfig={providerConfig} onChanged={refresh} />
-              </div>
-              <div className="grid content-start gap-4">
-                <ReviewPanel
-                  items={dueItems}
-                  selectedItem={selectedItem}
-                  providerConfig={providerConfig}
-                  settings={settings!}
-                  onChanged={refresh}
-                />
-                <VocabTestPanel providerConfig={providerConfig} onChanged={refresh} />
-                <QwertyTypingPanel onChanged={refresh} />
-                <LibraryPanel
-                  items={items}
-                  selectedId={selectedId}
-                  onSelect={item => setSelectedId(item.id)}
-                  onChanged={refresh}
-                />
-              </div>
-              <DetailPanel item={selectedItem} />
-            </div>
-          )}
-    </PageLayout>
-  )
-}
-
-function LearningPreferencesPanel({ settings, onChanged }: { settings: LearningSettings, onChanged: () => void }) {
+function LearningToggleRows() {
   const [selectionToolbar, setSelectionToolbar] = useAtom(configFieldsAtomMap.selectionToolbar)
   const [translateConfig, setTranslateConfig] = useAtom(configFieldsAtomMap.translate)
   const learningMode = translateConfig.page.learningMode ?? {
     enabled: false,
     maxTermsPerParagraph: 6,
-  }
-  const [desiredRetention, setDesiredRetention] = useState(String(settings.desiredRetention))
-
-  const save = async (patch: Partial<Omit<LearningSettings, "id" | "updatedAt">>) => {
-    await saveLearningSettings(patch)
-    onChanged()
   }
 
   const setLearningToolbarEnabled = (enabled: boolean) => {
@@ -1285,312 +80,205 @@ function LearningPreferencesPanel({ settings, onChanged }: { settings: LearningS
   }
 
   return (
-    <Card className="rounded-lg">
-      <CardHeader>
-        <CardTitle>学习偏好</CardTitle>
-        <CardDescription>FSRS、复习材料和划词保存。</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="grid gap-1 text-sm">
-            <span>目标保留率</span>
-            <Input
-              value={desiredRetention}
-              onChange={event => setDesiredRetention(event.target.value)}
-              onBlur={() => void save({ desiredRetention: Number(desiredRetention) || 0.9 })}
-            />
-          </label>
-          <label className="grid gap-1 text-sm">
-            <span>复习材料</span>
-            <Select value={settings.reviewMode} onValueChange={value => void save({ reviewMode: value as LearningSettings["reviewMode"] })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="story">短文</SelectItem>
-                <SelectItem value="dialogue">对话</SelectItem>
-              </SelectContent>
-            </Select>
-          </label>
+    <div className="grid gap-3">
+      <div className="flex items-center justify-between gap-4 rounded-md border border-border/70 bg-background p-3">
+        <div className="min-w-0">
+          <div className="text-sm font-medium">Selection capture</div>
+          <div className="text-xs text-muted-foreground">Show the learning save action in the selection toolbar.</div>
         </div>
-        <Separator />
-        <div className="grid gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-medium">巩固已掌握内容</div>
-              <div className="text-xs text-muted-foreground">开启后已掌握内容也会按 FSRS 到期进入今日队列。</div>
-            </div>
-            <Switch checked={settings.includeMasteredInReview} onCheckedChange={checked => void save({ includeMasteredInReview: checked })} />
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-medium">划词加入待学习</div>
-              <div className="text-xs text-muted-foreground">控制选中文本工具栏里的书签按钮。</div>
-            </div>
-            <Switch checked={selectionToolbar.features.learning?.enabled ?? true} onCheckedChange={setLearningToolbarEnabled} />
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-medium">学习翻译</div>
-              <div className="text-xs text-muted-foreground">页面翻译只提示未掌握词，已掌握词不重复翻译。</div>
-            </div>
-            <Switch checked={learningMode.enabled} onCheckedChange={setLearningTranslationEnabled} />
-          </div>
+        <Switch checked={selectionToolbar.features.learning?.enabled ?? true} onCheckedChange={setLearningToolbarEnabled} />
+      </div>
+      <div className="flex items-center justify-between gap-4 rounded-md border border-border/70 bg-background p-3">
+        <div className="min-w-0">
+          <div className="text-sm font-medium">Selective translation</div>
+          <div className="text-xs text-muted-foreground">Use mastery projection from the daemon to avoid translating mastered terms.</div>
         </div>
-      </CardContent>
-    </Card>
+        <Switch checked={learningMode.enabled} onCheckedChange={setLearningTranslationEnabled} />
+      </div>
+    </div>
   )
 }
 
-function ImportExportPanel({ onChanged }: { onChanged: () => void }) {
-  const exportJson = async () => {
-    const data = await exportLearningData()
-    saveAs(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }), `read-frog-learning-data-v${data.schemaVersion}.json`)
-    toast.success("学习数据已导出")
-  }
-
-  const importJson = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ""
-    if (!file) {
-      return
-    }
-    const text = await file.text()
-    await mergeLearningData(JSON.parse(text))
-    onChanged()
-    toast.success("学习数据已导入")
-  }
-
-  return (
-    <Card className="rounded-lg">
-      <CardHeader>
-        <CardTitle>本地备份</CardTitle>
-        <CardDescription>GitHub 同步失败时可手动导入导出 JSON。</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" onClick={() => void exportJson()}>
-          <Icon icon="tabler:file-export" />
-          导出 JSON
-        </Button>
-        <Button type="button" variant="outline" className="p-0">
-          <Label htmlFor="import-learning-data" className="flex h-full cursor-pointer items-center gap-2 px-3">
-            <Icon icon="tabler:file-import" />
-            导入 JSON
-          </Label>
-          <Input id="import-learning-data" type="file" className="hidden" accept=".json" onChange={event => void importJson(event)} />
-        </Button>
-      </CardContent>
-    </Card>
-  )
-}
-
-function GithubSyncPanel({ syncConfig, onChanged }: { syncConfig: GithubLearningSyncConfig | undefined, onChanged: () => void }) {
-  const [owner, setOwner] = useState(syncConfig?.owner ?? DEFAULT_SYNC.owner)
-  const [repo, setRepo] = useState(syncConfig?.repo ?? DEFAULT_SYNC.repo)
-  const [branch, setBranch] = useState(syncConfig?.branch ?? DEFAULT_SYNC.branch)
-  const [path, setPath] = useState(syncConfig?.path ?? DEFAULT_SYNC.path)
-  const [token, setToken] = useState(syncConfig?.token ?? "")
-  const [clientId, setClientId] = useState(syncConfig?.clientId ?? "")
-  const [deviceCode, setDeviceCode] = useState("")
-  const [userCode, setUserCode] = useState("")
-  const [verificationUri, setVerificationUri] = useState("")
+function WorkspaceBridge({
+  title,
+  description,
+}: {
+  title: string
+  description: string
+}) {
+  const [config, setConfig] = useState<LearningBridgeConfig | null>(null)
+  const [baseUrlDraft, setBaseUrlDraft] = useState(LEARNING_DAEMON_DEFAULT_BASE_URL)
+  const [status, setStatus] = useState<LearningBridgeStatus | null>(null)
   const [isBusy, setIsBusy] = useState(false)
 
-  const saveConfig = async (nextToken = token) => {
-    await saveGithubLearningSyncConfig({
-      owner,
-      repo,
-      branch,
-      path,
-      token: nextToken,
-      clientId,
-      lastSyncAt: syncConfig?.lastSyncAt,
-    })
-    onChanged()
-  }
-
-  const startDeviceFlow = async () => {
-    if (!clientId.trim()) {
-      toast.error("需要 GitHub OAuth App Client ID")
-      return
-    }
-    setIsBusy(true)
-    try {
-      const result = await requestGithubDeviceCode(clientId.trim())
-      setDeviceCode(result.device_code)
-      setUserCode(result.user_code)
-      setVerificationUri(result.verification_uri)
-      toast.info("打开 GitHub 验证页面并输入设备码")
-    }
-    catch (error) {
-      toast.error("GitHub OAuth 启动失败", {
-        description: error instanceof Error ? error.message : undefined,
-      })
-    }
-    finally {
-      setIsBusy(false)
-    }
-  }
-
-  const pollToken = async () => {
-    if (!deviceCode) {
-      return
-    }
-    setIsBusy(true)
-    try {
-      const result = await pollGithubDeviceToken({ clientId: clientId.trim(), deviceCode })
-      if (!result.access_token) {
-        throw new Error(result.error_description ?? result.error ?? "GitHub authorization is not ready")
-      }
-      setToken(result.access_token)
-      await saveConfig(result.access_token)
-      toast.success("GitHub 授权已保存")
-    }
-    catch (error) {
-      toast.error("GitHub 授权确认失败", {
-        description: error instanceof Error ? error.message : undefined,
-      })
-    }
-    finally {
-      setIsBusy(false)
-    }
-  }
-
-  const createRepo = async () => {
-    setIsBusy(true)
-    try {
-      await saveConfig()
-      await createPrivateLearningDataRepo({ token, repo })
-      toast.success("私有学习数据仓库已创建")
-      onChanged()
-    }
-    catch (error) {
-      toast.error("创建仓库失败", {
-        description: error instanceof Error ? error.message : undefined,
-      })
-    }
-    finally {
-      setIsBusy(false)
-    }
-  }
-
-  const sync = async () => {
-    setIsBusy(true)
-    try {
-      await saveConfig()
-      await syncLearningDataToGithub()
-      toast.success("学习数据已同步到 GitHub")
-      onChanged()
-    }
-    catch (error) {
-      toast.error("同步失败", {
-        description: error instanceof Error ? error.message : undefined,
-      })
-    }
-    finally {
-      setIsBusy(false)
-    }
-  }
-
-  return (
-    <Card className="rounded-lg">
-      <CardHeader>
-        <CardTitle>GitHub 私有仓库同步</CardTitle>
-        <CardDescription>IndexedDB 是主库，GitHub 用作备份和跨设备同步。</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="grid gap-1 text-sm">
-            <span>Owner</span>
-            <Input value={owner} onChange={event => setOwner(event.target.value)} />
-          </label>
-          <label className="grid gap-1 text-sm">
-            <span>Repo</span>
-            <Input value={repo} onChange={event => setRepo(event.target.value)} />
-          </label>
-          <label className="grid gap-1 text-sm">
-            <span>Branch</span>
-            <Input value={branch} onChange={event => setBranch(event.target.value)} />
-          </label>
-          <label className="grid gap-1 text-sm">
-            <span>Data path</span>
-            <Input value={path} onChange={event => setPath(event.target.value)} />
-          </label>
-        </div>
-        <Separator />
-        <div className="grid gap-3">
-          <label className="grid gap-1 text-sm">
-            <span>GitHub OAuth App Client ID</span>
-            <Input value={clientId} onChange={event => setClientId(event.target.value)} placeholder="Device Flow Client ID" />
-          </label>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" disabled={isBusy} onClick={startDeviceFlow}>
-              <Icon icon="tabler:brand-github" />
-              获取设备码
-            </Button>
-            <Button type="button" variant="outline" disabled={isBusy || !deviceCode} onClick={pollToken}>
-              确认授权
-            </Button>
-          </div>
-          {userCode && (
-            <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-              在浏览器打开
-              {" "}
-              <a className="underline" href={verificationUri} target="_blank" rel="noopener noreferrer">{verificationUri}</a>
-              ，输入设备码
-              {" "}
-              <span className="font-mono font-semibold">{userCode}</span>
-              。
-            </div>
-          )}
-          <label className="grid gap-1 text-sm">
-            <span>Access token</span>
-            <Input value={token} onChange={event => setToken(event.target.value)} type="password" placeholder="也可以直接粘贴 fine-grained token" />
-          </label>
-        </div>
-        <div className="flex flex-wrap justify-between gap-2">
-          <div className="text-xs text-muted-foreground">
-            最后同步：
-            {syncConfig?.lastSyncAt ? syncConfig.lastSyncAt.toLocaleString() : "尚未同步"}
-          </div>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" disabled={isBusy || !token} onClick={createRepo}>
-              创建私有仓库
-            </Button>
-            <Button type="button" disabled={isBusy || !token} onClick={sync}>
-              {isBusy ? "处理中..." : "同步"}
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-export function LearningSettingsPage() {
-  const [data, setData] = useState<LearningSettingsData | null>(null)
+  const workspaceUrl = useMemo(() => {
+    return (config?.baseUrl || baseUrlDraft || LEARNING_DAEMON_DEFAULT_BASE_URL).replace(/\/+$/, "")
+  }, [baseUrlDraft, config?.baseUrl])
+  const tone = getStatusTone(status, config)
 
   const refresh = useCallback(async () => {
-    setData(await loadLearningSettingsData())
+    setIsBusy(true)
+    try {
+      const nextConfig = await getLearningBridgeConfig()
+      const nextStatus = await sendMessage("getLearningBridgeStatus", undefined)
+      setConfig(nextConfig)
+      setBaseUrlDraft(nextConfig.baseUrl)
+      setStatus(nextStatus)
+    }
+    catch (error) {
+      setStatus({
+        state: "offline",
+        connected: false,
+        pendingCaptureCount: 0,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    finally {
+      setIsBusy(false)
+    }
   }, [])
 
   useEffect(() => {
     void refresh()
   }, [refresh])
 
+  const saveConfig = async (patch: Partial<LearningBridgeConfig>) => {
+    const current = config ?? await getLearningBridgeConfig()
+    const next = {
+      ...current,
+      ...patch,
+      baseUrl: patch.baseUrl?.trim() || current.baseUrl || LEARNING_DAEMON_DEFAULT_BASE_URL,
+    }
+    await saveLearningBridgeConfig(next)
+    setConfig(next)
+    setBaseUrlDraft(next.baseUrl)
+    await refresh()
+  }
+
+  const openWorkspace = async () => {
+    await sendMessage("openPage", {
+      url: workspaceUrl,
+      active: true,
+    })
+  }
+
+  const flushQueue = async () => {
+    setIsBusy(true)
+    try {
+      const result = await sendMessage("flushLearningBridgeQueue", undefined)
+      if (result.status === "flushed") {
+        toast.success("Learning queue flushed")
+      }
+      else {
+        toast.error("Learning queue not flushed", {
+          description: result.error,
+        })
+      }
+      await refresh()
+    }
+    finally {
+      setIsBusy(false)
+    }
+  }
+
   return (
-    <PageLayout title="学习设置" innerClassName="flex flex-col p-5 gap-4">
-      {data
-        ? (
-            <>
-              <LearningPreferencesPanel settings={data.settings} onChanged={refresh} />
-              <ImportExportPanel onChanged={refresh} />
-              <GithubSyncPanel
-                key={data.syncConfig?.updatedAt.getTime() ?? "empty-sync-config"}
-                syncConfig={data.syncConfig}
-                onChanged={refresh}
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <Card className="rounded-lg">
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{description}</CardDescription>
+          <CardAction>
+            <Badge variant="outline" className={cn("rounded-md border px-2 py-1", statusClassName(tone))}>
+              {STATUS_LABEL[tone]}
+            </Badge>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium">Workspace URL</span>
+              <Input
+                value={baseUrlDraft}
+                onChange={event => setBaseUrlDraft(event.target.value)}
+                onBlur={() => void saveConfig({ baseUrl: baseUrlDraft })}
               />
-            </>
-          )
-        : <div className="rounded-lg border p-6 text-sm text-muted-foreground">加载中...</div>}
+            </label>
+            <div className="flex items-end gap-2">
+              <Button type="button" variant="outline" disabled={isBusy} onClick={() => void refresh()}>
+                <Icon icon="tabler:refresh" />
+                Refresh
+              </Button>
+              <Button type="button" disabled={isBusy} onClick={() => void openWorkspace()}>
+                <Icon icon="tabler:external-link" />
+                Open
+              </Button>
+            </div>
+          </div>
+          <Separator />
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-md border border-border/70 bg-muted/30 p-3">
+              <div className="text-xs text-muted-foreground">Projection</div>
+              <div className="mt-1 truncate font-mono text-sm">{status?.daemon?.projectionVersion ?? "unknown"}</div>
+            </div>
+            <div className="rounded-md border border-border/70 bg-muted/30 p-3">
+              <div className="text-xs text-muted-foreground">Pending captures</div>
+              <div className="mt-1 font-mono text-sm">{status?.pendingCaptureCount ?? 0}</div>
+            </div>
+            <div className="rounded-md border border-border/70 bg-muted/30 p-3">
+              <div className="text-xs text-muted-foreground">Contract</div>
+              <div className="mt-1 font-mono text-sm">{status?.daemon?.contractVersion ?? "unknown"}</div>
+            </div>
+          </div>
+          {status?.error && (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
+              {status.error}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-lg">
+        <CardHeader>
+          <CardTitle>Bridge Controls</CardTitle>
+          <CardDescription>Keep extension-side learning narrow: capture, sync, and projection lookup.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <div className="flex items-center justify-between gap-4 rounded-md border border-border/70 bg-background p-3">
+            <div className="min-w-0">
+              <div className="text-sm font-medium">Daemon bridge</div>
+              <div className="text-xs text-muted-foreground">Disable only when using extension-local fallback data.</div>
+            </div>
+            <Switch checked={config?.enabled ?? true} onCheckedChange={checked => void saveConfig({ enabled: checked })} />
+          </div>
+          <Button type="button" variant="outline" disabled={isBusy || (status?.pendingCaptureCount ?? 0) === 0} onClick={() => void flushQueue()}>
+            <Icon icon="tabler:cloud-upload" />
+            Flush capture queue
+          </Button>
+          <LearningToggleRows />
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+export function LearningPage() {
+  return (
+    <PageLayout title="Learning" innerClassName="flex flex-col p-5 gap-4">
+      <WorkspaceBridge
+        title="Learning Workspace"
+        description="The full learning cockpit now runs in the local daemon/container. The extension keeps only capture, page translation, and bridge controls here."
+      />
+    </PageLayout>
+  )
+}
+
+export function LearningSettingsPage() {
+  return (
+    <PageLayout title="Learning Settings" innerClassName="flex flex-col p-5 gap-4">
+      <WorkspaceBridge
+        title="Learning Bridge Settings"
+        description="Configure how the extension reaches the daemon-hosted workspace and how learning data affects selection capture and translation."
+      />
     </PageLayout>
   )
 }
