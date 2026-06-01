@@ -438,14 +438,18 @@
       renderErrorBook();
     }
 
-    function scrollToSection(id) {
-      const target = $(id);
-      if (target) {
-        target.scrollIntoView({ block: "start", behavior: "smooth" });
-      }
-      document.querySelectorAll(".nav button").forEach((button) => {
-        button.setAttribute("aria-current", button.dataset.target === id ? "page" : "false");
+    function setActivePage(id) {
+      document.querySelectorAll(".workspace-page").forEach((page) => {
+        page.classList.toggle("is-active", page.id === id);
       });
+      document.querySelectorAll("[data-target]").forEach((button) => {
+        button.setAttribute("aria-current", button.dataset.target === id ? "page" : "false");
+        button.setAttribute("aria-selected", String(button.dataset.target === id));
+      });
+      document.querySelector(".main").scrollTop = 0;
+      if (id === "practice") {
+        $("typing-input").focus({ preventScroll: true });
+      }
     }
 
     function downloadBlob(filename, data) {
@@ -700,9 +704,28 @@
       void importWorkspaceData(file);
       event.target.value = "";
     });
-    document.querySelectorAll(".nav button").forEach((button) => {
+    document.querySelectorAll("[data-target]").forEach((button) => {
       button.addEventListener("click", () => {
-        scrollToSection(button.dataset.target);
+        setActivePage(button.dataset.target);
+      });
+      button.addEventListener("keydown", (event) => {
+        if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
+          return;
+        }
+        event.preventDefault();
+        const tablist = button.closest("[role='tablist']");
+        const buttons = [...tablist.querySelectorAll("[data-target]")];
+        const currentIndex = buttons.indexOf(button);
+        const nextIndex = event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? buttons.length - 1
+            : event.key === "ArrowUp"
+              ? (currentIndex - 1 + buttons.length) % buttons.length
+              : (currentIndex + 1) % buttons.length;
+        const nextButton = buttons[nextIndex];
+        nextButton.focus();
+        setActivePage(nextButton.dataset.target);
       });
     });
     $("mode-projection-button").addEventListener("click", () => {

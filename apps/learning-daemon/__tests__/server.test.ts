@@ -102,6 +102,8 @@ describe("learning daemon server", () => {
     expect(html).toContain("/workspace/app.js")
     expect(html).toContain("dictionary-select")
     expect(html).toContain("chapter-word-strip")
+    expect(html).toContain("workspace-page")
+    expect(html).toContain("data-page=\"practice\"")
     expect(html).toContain("本地容器里的阅读记忆与 qwerty 练习中枢")
     expect(html).toContain("掌握度投影")
     expect(html).toContain("数据导入导出")

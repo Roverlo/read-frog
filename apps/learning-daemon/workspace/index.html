@@ -23,17 +23,26 @@
       </div>
     </header>
 
+    <nav class="mobile-tabs" role="tablist" aria-label="学习页面快捷切换">
+      <button type="button" role="tab" aria-selected="true" aria-controls="overview" data-target="overview">总览</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="practice" data-target="practice">打字</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="projection" data-target="projection">掌握度</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="inbox" data-target="inbox">阅读</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="errors" data-target="errors">错题</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="data" data-target="data">数据</button>
+    </nav>
+
     <div class="workspace">
       <aside class="rail" aria-label="工作台导航">
         <div class="rail-section">
           <div class="rail-label">功能区</div>
-          <nav class="nav">
-            <button type="button" data-target="overview" aria-current="page">总览</button>
-            <button type="button" data-target="practice">打字</button>
-            <button type="button" data-target="projection">掌握度</button>
-            <button type="button" data-target="inbox">阅读</button>
-            <button type="button" data-target="errors">错题</button>
-            <button type="button" data-target="data">数据</button>
+          <nav class="nav" role="tablist" aria-label="学习页面">
+            <button type="button" role="tab" aria-selected="true" aria-controls="overview" data-target="overview" aria-current="page">总览</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="practice" data-target="practice">打字</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="projection" data-target="projection">掌握度</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="inbox" data-target="inbox">阅读</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="errors" data-target="errors">错题</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="data" data-target="data">数据</button>
           </nav>
         </div>
 
@@ -48,7 +57,7 @@
       </aside>
 
       <main class="main">
-        <section class="overview-panel" id="overview" aria-label="学习工作台总览">
+        <section class="workspace-page overview-panel is-active" id="overview" data-page="overview" role="tabpanel" aria-label="学习工作台总览">
           <div class="overview-copy">
             <div class="eyebrow">掌握度投影</div>
             <h2>会的少翻，不会的多练。</h2>
@@ -79,58 +88,60 @@
           </section>
         </section>
 
-        <section class="surface practice" id="practice" aria-label="qwerty 打字练习">
-          <div class="stage">
-            <div class="stage-head">
-              <div>
-                <div class="label">当前练习</div>
-                <div id="practice-source" class="source-line">掌握度队列</div>
+        <section class="workspace-page practice-page" id="practice" data-page="practice" role="tabpanel" aria-label="qwerty 打字练习">
+          <section class="surface practice" aria-label="qwerty 打字练习台">
+            <div class="stage">
+              <div class="stage-head">
+                <div>
+                  <div class="label">当前练习</div>
+                  <div id="practice-source" class="source-line">掌握度队列</div>
+                </div>
+                <div class="segmented" aria-label="练习模式">
+                  <button id="mode-projection-button" type="button" aria-pressed="true">复习</button>
+                  <button id="mode-deck-button" type="button" aria-pressed="false">词库</button>
+                </div>
               </div>
-              <div class="segmented" aria-label="练习模式">
-                <button id="mode-projection-button" type="button" aria-pressed="true">复习</button>
-                <button id="mode-deck-button" type="button" aria-pressed="false">词库</button>
+              <div id="stage-word" class="stage-word">暂无词条</div>
+              <div id="typing-ghost" class="typing-ghost" aria-live="polite"></div>
+              <input id="typing-input" class="stage-input" autocomplete="off" spellcheck="false" aria-label="输入当前单词">
+              <div id="definition" class="definition">从扩展划词保存，或加载 qwerty 词库开始。</div>
+              <div class="actions">
+                <button id="submit-button" class="primary" type="button">提交</button>
+                <button id="skip-button" class="secondary" type="button">下一个</button>
+                <span id="toast" class="toast" role="status"></span>
               </div>
             </div>
-            <div id="stage-word" class="stage-word">暂无词条</div>
-            <div id="typing-ghost" class="typing-ghost" aria-live="polite"></div>
-            <input id="typing-input" class="stage-input" autocomplete="off" spellcheck="false" aria-label="输入当前单词">
-            <div id="definition" class="definition">从扩展划词保存，或加载 qwerty 词库开始。</div>
-            <div class="actions">
-              <button id="submit-button" class="primary" type="button">提交</button>
-              <button id="skip-button" class="secondary" type="button">下一个</button>
-              <span id="toast" class="toast" role="status"></span>
+            <div class="session" aria-label="本次练习">
+              <div class="session-title">本次练习</div>
+              <div class="session-row"><span>次数</span><strong id="session-attempts">0</strong></div>
+              <div class="session-row"><span>正确</span><strong id="session-correct">0</strong></div>
+              <div class="session-row"><span>准确率</span><strong id="session-accuracy">0%</strong></div>
+              <div class="session-row"><span>当前</span><strong id="session-active">-</strong></div>
+              <div class="progress-shell"><div id="chapter-progress" class="progress-bar"></div></div>
+              <div class="session-row"><span>章节</span><strong id="chapter-progress-text">0/0</strong></div>
             </div>
-          </div>
-          <div class="session" aria-label="本次练习">
-            <div class="session-title">本次练习</div>
-            <div class="session-row"><span>次数</span><strong id="session-attempts">0</strong></div>
-            <div class="session-row"><span>正确</span><strong id="session-correct">0</strong></div>
-            <div class="session-row"><span>准确率</span><strong id="session-accuracy">0%</strong></div>
-            <div class="session-row"><span>当前</span><strong id="session-active">-</strong></div>
-            <div class="progress-shell"><div id="chapter-progress" class="progress-bar"></div></div>
-            <div class="session-row"><span>章节</span><strong id="chapter-progress-text">0/0</strong></div>
-          </div>
+          </section>
+
+          <section class="surface deck-panel" aria-label="qwerty 词库控制">
+            <div class="deck-controls">
+              <label class="select-field">
+                <span class="label">词库</span>
+                <select id="dictionary-select" aria-label="选择 qwerty 词库"></select>
+              </label>
+              <div class="chapter-controls">
+                <button id="previous-chapter-button" class="secondary compact" type="button">上一章</button>
+                <div class="chapter-meta">
+                  <strong id="chapter-title">第 1 章</strong>
+                  <span id="chapter-range">0 词</span>
+                </div>
+                <button id="next-chapter-button" class="secondary compact" type="button">下一章</button>
+              </div>
+            </div>
+            <div id="chapter-word-strip" class="word-strip" aria-label="当前章节单词"></div>
+          </section>
         </section>
 
-        <section class="surface deck-panel" aria-label="qwerty 词库控制">
-          <div class="deck-controls">
-            <label class="select-field">
-              <span class="label">词库</span>
-              <select id="dictionary-select" aria-label="选择 qwerty 词库"></select>
-            </label>
-            <div class="chapter-controls">
-              <button id="previous-chapter-button" class="secondary compact" type="button">上一章</button>
-              <div class="chapter-meta">
-                <strong id="chapter-title">第 1 章</strong>
-                <span id="chapter-range">0 词</span>
-              </div>
-              <button id="next-chapter-button" class="secondary compact" type="button">下一章</button>
-            </div>
-          </div>
-          <div id="chapter-word-strip" class="word-strip" aria-label="当前章节单词"></div>
-        </section>
-
-        <section class="table-wrap" id="projection" aria-label="掌握度词条">
+        <section class="workspace-page table-wrap" id="projection" data-page="projection" role="tabpanel" aria-label="掌握度词条">
           <div class="table-head">
             <div>
               <div class="label">掌握度词条</div>
@@ -153,10 +164,7 @@
             </tbody>
           </table>
         </section>
-      </main>
-
-      <aside class="context" aria-label="学习上下文">
-        <section class="context-section" id="inbox">
+        <section class="workspace-page context-section" id="inbox" data-page="inbox" role="tabpanel" aria-label="阅读收件箱">
           <div class="panel-title">
             <h2>阅读收件箱</h2>
             <span class="label" id="inbox-count">0 条</span>
@@ -165,7 +173,7 @@
             <div class="empty">还没有载入学习数据。</div>
           </div>
         </section>
-        <section class="context-section" id="errors">
+        <section class="workspace-page context-section" id="errors" data-page="errors" role="tabpanel" aria-label="错题本">
           <div class="panel-title">
             <h2>错题本</h2>
             <span class="label" id="error-count">0 个错误</span>
@@ -175,7 +183,7 @@
           </div>
           <div id="key-mistake-list" class="key-grid" aria-label="错误按键组合"></div>
         </section>
-        <section class="context-section" id="data">
+        <section class="workspace-page context-section" id="data" data-page="data" role="tabpanel" aria-label="数据导入导出">
           <div class="panel-title">
             <h2>数据导入导出</h2>
             <span class="label">可迁移</span>
@@ -189,7 +197,7 @@
           </div>
           <div id="data-status" class="data-status">待命</div>
         </section>
-      </aside>
+      </main>
     </div>
   </div>
 
