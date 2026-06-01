@@ -43,7 +43,7 @@ Owned fork surface:
 Purpose:
 
 - Give content scripts, popup, options, and translation code a typed boundary to the daemon.
-- Queue selection captures locally when the daemon is offline.
+- Queue selection captures and qwerty practice records locally when the daemon is offline.
 - Query mastery projection terms for selective translation.
 
 Upstream sync rule:

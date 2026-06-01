@@ -37,11 +37,17 @@ import {
 } from "./daemon-client"
 import {
   enqueuePendingLearningCapture,
+  enqueuePendingLearningQwertyChapterRecord,
+  enqueuePendingLearningQwertyWordRecord,
   getLearningBridgeConfig,
   getLearningProjectionCache,
   getPendingLearningCaptures,
+  getPendingLearningQwertyChapterRecords,
+  getPendingLearningQwertyWordRecords,
   replaceLearningProjectionCache,
   replacePendingLearningCaptures,
+  replacePendingLearningQwertyChapterRecords,
+  replacePendingLearningQwertyWordRecords,
 } from "./storage"
 
 export interface LearningDaemonBridgeClient {
@@ -67,6 +73,12 @@ function getDefaultStore(): LearningCaptureQueueStore {
     getPendingCaptures: getPendingLearningCaptures,
     replacePendingCaptures: replacePendingLearningCaptures,
     enqueueCapture: enqueuePendingLearningCapture,
+    getPendingQwertyWordRecords: getPendingLearningQwertyWordRecords,
+    replacePendingQwertyWordRecords: replacePendingLearningQwertyWordRecords,
+    enqueueQwertyWordRecord: enqueuePendingLearningQwertyWordRecord,
+    getPendingQwertyChapterRecords: getPendingLearningQwertyChapterRecords,
+    replacePendingQwertyChapterRecords: replacePendingLearningQwertyChapterRecords,
+    enqueueQwertyChapterRecord: enqueuePendingLearningQwertyChapterRecord,
     getProjectionCache: getLearningProjectionCache,
     replaceProjectionCache: replaceLearningProjectionCache,
   }
@@ -158,9 +170,11 @@ export async function getLearningBridgeStatus(
   deps: LearningBridgeServiceDeps = {},
 ): Promise<LearningBridgeStatus> {
   const { store, client } = getDeps(deps)
-  const [config, pendingCaptures] = await Promise.all([
+  const [config, pendingCaptures, pendingQwertyWordRecords, pendingQwertyChapterRecords] = await Promise.all([
     store.getConfig(),
     store.getPendingCaptures(),
+    store.getPendingQwertyWordRecords(),
+    store.getPendingQwertyChapterRecords(),
   ])
 
   if (!config.enabled) {
@@ -168,6 +182,8 @@ export async function getLearningBridgeStatus(
       state: "disabled",
       connected: false,
       pendingCaptureCount: pendingCaptures.length,
+      pendingQwertyWordRecordCount: pendingQwertyWordRecords.length,
+      pendingQwertyChapterRecordCount: pendingQwertyChapterRecords.length,
     }
   }
 
@@ -178,6 +194,8 @@ export async function getLearningBridgeStatus(
       state,
       connected: state === "connected",
       pendingCaptureCount: pendingCaptures.length,
+      pendingQwertyWordRecordCount: pendingQwertyWordRecords.length,
+      pendingQwertyChapterRecordCount: pendingQwertyChapterRecords.length,
       daemon,
     }
   }
@@ -186,6 +204,8 @@ export async function getLearningBridgeStatus(
       state: "offline",
       connected: false,
       pendingCaptureCount: pendingCaptures.length,
+      pendingQwertyWordRecordCount: pendingQwertyWordRecords.length,
+      pendingQwertyChapterRecordCount: pendingQwertyChapterRecords.length,
       error: getErrorMessage(error),
     }
   }
@@ -197,16 +217,24 @@ export async function flushLearningBridgeQueue(
   const { store, client } = getDeps(deps)
   const config = await store.getConfig()
   const pendingCaptures = await store.getPendingCaptures()
+  const pendingQwertyWordRecords = await store.getPendingQwertyWordRecords()
+  const pendingQwertyChapterRecords = await store.getPendingQwertyChapterRecords()
 
   if (!config.enabled) {
     return {
       status: "disabled",
       pendingCaptureCount: pendingCaptures.length,
+      pendingQwertyWordRecordCount: pendingQwertyWordRecords.length,
+      pendingQwertyChapterRecordCount: pendingQwertyChapterRecords.length,
       flushedCaptureCount: 0,
+      flushedQwertyWordRecordCount: 0,
+      flushedQwertyChapterRecordCount: 0,
     }
   }
 
   let flushedCaptureCount = 0
+  let flushedQwertyWordRecordCount = 0
+  let flushedQwertyChapterRecordCount = 0
   for (let index = 0; index < pendingCaptures.length; index += 1) {
     const capture = pendingCaptures[index]!
     try {
@@ -219,17 +247,73 @@ export async function flushLearningBridgeQueue(
       return {
         status: "offline",
         pendingCaptureCount: remaining.length,
+        pendingQwertyWordRecordCount: pendingQwertyWordRecords.length,
+        pendingQwertyChapterRecordCount: pendingQwertyChapterRecords.length,
         flushedCaptureCount,
+        flushedQwertyWordRecordCount,
+        flushedQwertyChapterRecordCount,
         error: getErrorMessage(error),
       }
     }
   }
 
   await store.replacePendingCaptures([])
+
+  for (let index = 0; index < pendingQwertyWordRecords.length; index += 1) {
+    const record = pendingQwertyWordRecords[index]!
+    try {
+      await client.recordQwertyWord(record, config)
+      flushedQwertyWordRecordCount += 1
+    }
+    catch (error) {
+      const remaining = pendingQwertyWordRecords.slice(index)
+      await store.replacePendingQwertyWordRecords(remaining)
+      return {
+        status: "offline",
+        pendingCaptureCount: 0,
+        pendingQwertyWordRecordCount: remaining.length,
+        pendingQwertyChapterRecordCount: pendingQwertyChapterRecords.length,
+        flushedCaptureCount,
+        flushedQwertyWordRecordCount,
+        flushedQwertyChapterRecordCount,
+        error: getErrorMessage(error),
+      }
+    }
+  }
+
+  await store.replacePendingQwertyWordRecords([])
+
+  for (let index = 0; index < pendingQwertyChapterRecords.length; index += 1) {
+    const record = pendingQwertyChapterRecords[index]!
+    try {
+      await client.recordQwertyChapter(record, config)
+      flushedQwertyChapterRecordCount += 1
+    }
+    catch (error) {
+      const remaining = pendingQwertyChapterRecords.slice(index)
+      await store.replacePendingQwertyChapterRecords(remaining)
+      return {
+        status: "offline",
+        pendingCaptureCount: 0,
+        pendingQwertyWordRecordCount: 0,
+        pendingQwertyChapterRecordCount: remaining.length,
+        flushedCaptureCount,
+        flushedQwertyWordRecordCount,
+        flushedQwertyChapterRecordCount,
+        error: getErrorMessage(error),
+      }
+    }
+  }
+
+  await store.replacePendingQwertyChapterRecords([])
   return {
     status: "flushed",
     pendingCaptureCount: 0,
+    pendingQwertyWordRecordCount: 0,
+    pendingQwertyChapterRecordCount: 0,
     flushedCaptureCount,
+    flushedQwertyWordRecordCount,
+    flushedQwertyChapterRecordCount,
   }
 }
 
@@ -374,6 +458,8 @@ export async function syncLearningCaptureSelection(
       status: "queued",
       pendingCaptureCount: pendingCaptures.length,
       flushedCaptureCount: flushResult.flushedCaptureCount,
+      flushedQwertyWordRecordCount: flushResult.flushedQwertyWordRecordCount,
+      flushedQwertyChapterRecordCount: flushResult.flushedQwertyChapterRecordCount,
       error: flushResult.error,
     }
   }
@@ -384,6 +470,8 @@ export async function syncLearningCaptureSelection(
       status: "synced",
       pendingCaptureCount: 0,
       flushedCaptureCount: flushResult.flushedCaptureCount,
+      flushedQwertyWordRecordCount: flushResult.flushedQwertyWordRecordCount,
+      flushedQwertyChapterRecordCount: flushResult.flushedQwertyChapterRecordCount,
     }
   }
   catch (error) {
@@ -392,6 +480,8 @@ export async function syncLearningCaptureSelection(
       status: "queued",
       pendingCaptureCount: pendingCaptures.length,
       flushedCaptureCount: flushResult.flushedCaptureCount,
+      flushedQwertyWordRecordCount: flushResult.flushedQwertyWordRecordCount,
+      flushedQwertyChapterRecordCount: flushResult.flushedQwertyChapterRecordCount,
       error: getErrorMessage(error),
     }
   }
@@ -410,6 +500,19 @@ export async function syncLearningQwertyWordRecord(
     }
   }
 
+  const flushResult = await flushLearningBridgeQueue({ store, client })
+  if (flushResult.status !== "flushed") {
+    const pendingRecords = await store.enqueueQwertyWordRecord(record)
+    return {
+      status: "queued",
+      pendingQwertyWordRecordCount: pendingRecords.length,
+      flushedCaptureCount: flushResult.flushedCaptureCount,
+      flushedQwertyWordRecordCount: flushResult.flushedQwertyWordRecordCount,
+      flushedQwertyChapterRecordCount: flushResult.flushedQwertyChapterRecordCount,
+      error: flushResult.error,
+    }
+  }
+
   try {
     const health = await client.getHealth(config)
     if (getHealthState(health) !== "connected") {
@@ -421,12 +524,21 @@ export async function syncLearningQwertyWordRecord(
 
     return {
       status: "synced",
+      pendingQwertyWordRecordCount: 0,
+      flushedCaptureCount: flushResult.flushedCaptureCount,
+      flushedQwertyWordRecordCount: flushResult.flushedQwertyWordRecordCount,
+      flushedQwertyChapterRecordCount: flushResult.flushedQwertyChapterRecordCount,
       response: await client.recordQwertyWord(record, config),
     }
   }
   catch (error) {
+    const pendingRecords = await store.enqueueQwertyWordRecord(record)
     return {
-      status: "offline",
+      status: "queued",
+      pendingQwertyWordRecordCount: pendingRecords.length,
+      flushedCaptureCount: flushResult.flushedCaptureCount,
+      flushedQwertyWordRecordCount: flushResult.flushedQwertyWordRecordCount,
+      flushedQwertyChapterRecordCount: flushResult.flushedQwertyChapterRecordCount,
       error: getErrorMessage(error),
     }
   }
@@ -445,6 +557,19 @@ export async function syncLearningQwertyChapterRecord(
     }
   }
 
+  const flushResult = await flushLearningBridgeQueue({ store, client })
+  if (flushResult.status !== "flushed") {
+    const pendingRecords = await store.enqueueQwertyChapterRecord(record)
+    return {
+      status: "queued",
+      pendingQwertyChapterRecordCount: pendingRecords.length,
+      flushedCaptureCount: flushResult.flushedCaptureCount,
+      flushedQwertyWordRecordCount: flushResult.flushedQwertyWordRecordCount,
+      flushedQwertyChapterRecordCount: flushResult.flushedQwertyChapterRecordCount,
+      error: flushResult.error,
+    }
+  }
+
   try {
     const health = await client.getHealth(config)
     if (getHealthState(health) !== "connected") {
@@ -456,12 +581,21 @@ export async function syncLearningQwertyChapterRecord(
 
     return {
       status: "synced",
+      pendingQwertyChapterRecordCount: 0,
+      flushedCaptureCount: flushResult.flushedCaptureCount,
+      flushedQwertyWordRecordCount: flushResult.flushedQwertyWordRecordCount,
+      flushedQwertyChapterRecordCount: flushResult.flushedQwertyChapterRecordCount,
       response: await client.recordQwertyChapter(record, config),
     }
   }
   catch (error) {
+    const pendingRecords = await store.enqueueQwertyChapterRecord(record)
     return {
-      status: "offline",
+      status: "queued",
+      pendingQwertyChapterRecordCount: pendingRecords.length,
+      flushedCaptureCount: flushResult.flushedCaptureCount,
+      flushedQwertyWordRecordCount: flushResult.flushedQwertyWordRecordCount,
+      flushedQwertyChapterRecordCount: flushResult.flushedQwertyChapterRecordCount,
       error: getErrorMessage(error),
     }
   }

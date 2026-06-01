@@ -51,6 +51,13 @@ async function refreshLearningProjectionCacheAfterWrite(
     .catch(error => logger.warn("Failed to refresh learning projection after write", error))
 }
 
+function resultFlushedProjectionData(result: {
+  flushedCaptureCount?: number
+  flushedQwertyWordRecordCount?: number
+}) {
+  return (result.flushedCaptureCount ?? 0) > 0 || (result.flushedQwertyWordRecordCount ?? 0) > 0
+}
+
 export function setupLearningBridgeMessageHandlers(
   tabsApi: Pick<typeof browser.tabs, "query"> = browser.tabs,
 ) {
@@ -60,7 +67,7 @@ export function setupLearningBridgeMessageHandlers(
 
   onMessage("syncLearningCaptureSelection", async (message) => {
     const result = await syncLearningCaptureSelection(message.data)
-    if (result.status === "synced") {
+    if (result.status === "synced" || resultFlushedProjectionData(result)) {
       await refreshLearningProjectionCacheAfterWrite(tabsApi)
     }
     return result
@@ -68,14 +75,18 @@ export function setupLearningBridgeMessageHandlers(
 
   onMessage("syncLearningQwertyWordRecord", async (message) => {
     const result = await syncLearningQwertyWordRecord(message.data)
-    if (result.status === "synced") {
+    if (result.status === "synced" || resultFlushedProjectionData(result)) {
       await refreshLearningProjectionCacheAfterWrite(tabsApi)
     }
     return result
   })
 
   onMessage("syncLearningQwertyChapterRecord", async (message) => {
-    return await syncLearningQwertyChapterRecord(message.data)
+    const result = await syncLearningQwertyChapterRecord(message.data)
+    if (resultFlushedProjectionData(result)) {
+      await refreshLearningProjectionCacheAfterWrite(tabsApi)
+    }
+    return result
   })
 
   onMessage("getLearningWorkspaceState", async () => {
@@ -84,7 +95,10 @@ export function setupLearningBridgeMessageHandlers(
 
   onMessage("flushLearningBridgeQueue", async () => {
     const result = await flushLearningBridgeQueue()
-    if (result.status === "flushed" && result.flushedCaptureCount > 0) {
+    if (
+      result.status === "flushed"
+      && resultFlushedProjectionData(result)
+    ) {
       await refreshLearningProjectionCacheAfterWrite(tabsApi)
     }
     return result

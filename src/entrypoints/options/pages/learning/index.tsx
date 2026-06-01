@@ -130,6 +130,8 @@ function WorkspaceBridge({
         state: "offline",
         connected: false,
         pendingCaptureCount: 0,
+        pendingQwertyWordRecordCount: 0,
+        pendingQwertyChapterRecordCount: 0,
         error: error instanceof Error ? error.message : String(error),
       })
     }
@@ -180,6 +182,9 @@ function WorkspaceBridge({
       setIsBusy(false)
     }
   }
+  const pendingQueueCount = (status?.pendingCaptureCount ?? 0)
+    + (status?.pendingQwertyWordRecordCount ?? 0)
+    + (status?.pendingQwertyChapterRecordCount ?? 0)
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -221,8 +226,8 @@ function WorkspaceBridge({
               <div className="mt-1 truncate font-mono text-sm">{status?.daemon?.projectionVersion ?? "unknown"}</div>
             </div>
             <div className="rounded-md border border-border/70 bg-muted/30 p-3">
-              <div className="text-xs text-muted-foreground">Pending captures</div>
-              <div className="mt-1 font-mono text-sm">{status?.pendingCaptureCount ?? 0}</div>
+              <div className="text-xs text-muted-foreground">Pending queue</div>
+              <div className="mt-1 font-mono text-sm">{pendingQueueCount}</div>
             </div>
             <div className="rounded-md border border-border/70 bg-muted/30 p-3">
               <div className="text-xs text-muted-foreground">Contract</div>
@@ -234,6 +239,9 @@ function WorkspaceBridge({
               {status.error}
             </div>
           )}
+          <div className="text-xs text-muted-foreground">
+            Queue: {status?.pendingCaptureCount ?? 0} captures, {status?.pendingQwertyWordRecordCount ?? 0} qwerty words, {status?.pendingQwertyChapterRecordCount ?? 0} qwerty chapters.
+          </div>
         </CardContent>
       </Card>
 
@@ -250,9 +258,9 @@ function WorkspaceBridge({
             </div>
             <Switch checked={config?.enabled ?? true} onCheckedChange={checked => void saveConfig({ enabled: checked })} />
           </div>
-          <Button type="button" variant="outline" disabled={isBusy || (status?.pendingCaptureCount ?? 0) === 0} onClick={() => void flushQueue()}>
+          <Button type="button" variant="outline" disabled={isBusy || pendingQueueCount === 0} onClick={() => void flushQueue()}>
             <Icon icon="tabler:cloud-upload" />
-            Flush capture queue
+            Flush bridge queue
           </Button>
           <LearningToggleRows />
         </CardContent>

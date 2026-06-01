@@ -147,6 +147,8 @@ const checks = [
 
   check("qwerty practice writes stay behind the extension-to-daemon bridge", () => {
     const source = readRepoFile("src/utils/learning/qwerty-typing.ts")
+    const bridgeService = readRepoFile("src/utils/learning-bridge/background-service.ts")
+    const bridgeStorage = readRepoFile("src/utils/learning-bridge/storage.ts")
     const failures: string[] = []
     if (!source.includes("syncLearningQwertyWordRecord")) {
       failures.push("qwerty-typing.ts must write through syncLearningQwertyWordRecord")
@@ -157,6 +159,24 @@ const checks = [
     if (includesAny(source, localLearningWritePatterns)) {
       failures.push("qwerty-typing.ts imports or writes local learning persistence")
     }
+    const requiredBridgeTokens = [
+      "enqueueQwertyWordRecord",
+      "enqueueQwertyChapterRecord",
+      "replacePendingQwertyWordRecords",
+      "replacePendingQwertyChapterRecords",
+    ]
+    failures.push(...requiredBridgeTokens
+      .filter(text => !bridgeService.includes(text))
+      .map(text => `background-service.ts is missing qwerty queue bridge token: ${text}`))
+
+    const requiredStorageTokens = [
+      "LEARNING_BRIDGE_PENDING_QWERTY_WORD_RECORDS_KEY",
+      "LEARNING_BRIDGE_PENDING_QWERTY_CHAPTER_RECORDS_KEY",
+      "MAX_PENDING_LEARNING_QWERTY_RECORDS",
+    ]
+    failures.push(...requiredStorageTokens
+      .filter(text => !bridgeStorage.includes(text))
+      .map(text => `storage.ts is missing qwerty queue storage token: ${text}`))
     return failures
   }),
 

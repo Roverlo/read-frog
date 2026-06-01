@@ -6,6 +6,8 @@ import type {
 import type {
   LearningCaptureSelectionRequest,
   LearningDaemonHealthResponse,
+  LearningQwertyChapterRecordRequest,
+  LearningQwertyWordRecordRequest,
   MasteryProjectionEntry,
 } from "@/utils/learning-contracts"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -40,8 +42,12 @@ function createProjectionEntry(overrides: Partial<MasteryProjectionEntry> = {}):
 function createStore(
   seed: LearningCaptureSelectionRequest[] = [],
   cacheSeed?: LearningBridgeProjectionCache,
+  qwertyWordSeed: LearningQwertyWordRecordRequest[] = [],
+  qwertyChapterSeed: LearningQwertyChapterRecordRequest[] = [],
 ) {
   let pending = [...seed]
+  let pendingQwertyWordRecords = [...qwertyWordSeed]
+  let pendingQwertyChapterRecords = [...qwertyChapterSeed]
   let projectionCache: LearningBridgeProjectionCache = cacheSeed ?? {
     projectionVersion: undefined,
     entries: [],
@@ -56,6 +62,22 @@ function createStore(
       pending = [...pending, capture]
       return pending
     }),
+    getPendingQwertyWordRecords: vi.fn(async () => pendingQwertyWordRecords),
+    replacePendingQwertyWordRecords: vi.fn(async (records) => {
+      pendingQwertyWordRecords = [...records]
+    }),
+    enqueueQwertyWordRecord: vi.fn(async (record) => {
+      pendingQwertyWordRecords = [...pendingQwertyWordRecords, record]
+      return pendingQwertyWordRecords
+    }),
+    getPendingQwertyChapterRecords: vi.fn(async () => pendingQwertyChapterRecords),
+    replacePendingQwertyChapterRecords: vi.fn(async (records) => {
+      pendingQwertyChapterRecords = [...records]
+    }),
+    enqueueQwertyChapterRecord: vi.fn(async (record) => {
+      pendingQwertyChapterRecords = [...pendingQwertyChapterRecords, record]
+      return pendingQwertyChapterRecords
+    }),
     getProjectionCache: vi.fn(async () => projectionCache),
     replaceProjectionCache: vi.fn(async (cache) => {
       projectionCache = { ...cache, entries: [...cache.entries] }
@@ -64,6 +86,8 @@ function createStore(
   return {
     store,
     getPending: () => pending,
+    getPendingQwertyWordRecords: () => pendingQwertyWordRecords,
+    getPendingQwertyChapterRecords: () => pendingQwertyChapterRecords,
     getProjectionCache: () => projectionCache,
   }
 }
@@ -90,6 +114,8 @@ describe("learning bridge background service", () => {
       state: "connected",
       connected: true,
       pendingCaptureCount: 0,
+      pendingQwertyWordRecordCount: 0,
+      pendingQwertyChapterRecordCount: 0,
       daemon: createHealth(),
     })
   })
@@ -123,6 +149,8 @@ describe("learning bridge background service", () => {
       status: "queued",
       pendingCaptureCount: 1,
       flushedCaptureCount: 0,
+      flushedQwertyWordRecordCount: 0,
+      flushedQwertyChapterRecordCount: 0,
       error: "daemon offline",
     })
     expect(getPending()).toMatchObject([{
@@ -168,6 +196,8 @@ describe("learning bridge background service", () => {
       status: "synced",
       pendingCaptureCount: 0,
       flushedCaptureCount: 1,
+      flushedQwertyWordRecordCount: 0,
+      flushedQwertyChapterRecordCount: 0,
     })
     expect(syncedIds).toEqual(["queued-1", "capture-2"])
     expect(getPending()).toEqual([])
@@ -394,12 +424,63 @@ describe("learning bridge background service", () => {
       client,
     })).resolves.toEqual({
       status: "synced",
+      pendingQwertyWordRecordCount: 0,
+      flushedCaptureCount: 0,
+      flushedQwertyWordRecordCount: 0,
+      flushedQwertyChapterRecordCount: 0,
       response,
     })
     expect(client.recordQwertyWord).toHaveBeenCalledWith(expect.objectContaining({
       word: "workflow",
       accuracy: 1,
     }), config)
+  })
+
+  it("queues qwerty word results when queued bridge records cannot flush", async () => {
+    const { syncLearningQwertyWordRecord } = await import("../background-service")
+    const queuedRecord: LearningQwertyWordRecordRequest = {
+      word: "ability",
+      input: "ability",
+      correct: true,
+      accuracy: 1,
+      durationMs: 1000,
+      mistakes: [],
+    }
+    const { store, getPendingQwertyWordRecords } = createStore([], undefined, [queuedRecord])
+    const client = {
+      getHealth: vi.fn(async () => createHealth()),
+      captureSelection: vi.fn(),
+      recordQwertyWord: vi.fn(async () => {
+        throw new Error("daemon offline")
+      }),
+      recordQwertyChapter: vi.fn(),
+      getWorkspaceState: vi.fn(),
+      getProjection: vi.fn(),
+      getProjectionTerms: vi.fn(),
+    }
+
+    await expect(syncLearningQwertyWordRecord({
+      word: "workflow",
+      input: "workflow",
+      correct: true,
+      accuracy: 1,
+      durationMs: 1200,
+      mistakes: [],
+    }, {
+      store,
+      client,
+    })).resolves.toEqual({
+      status: "queued",
+      pendingQwertyWordRecordCount: 2,
+      flushedCaptureCount: 0,
+      flushedQwertyWordRecordCount: 0,
+      flushedQwertyChapterRecordCount: 0,
+      error: "daemon offline",
+    })
+    expect(getPendingQwertyWordRecords()).toEqual([
+      queuedRecord,
+      expect.objectContaining({ word: "workflow" }),
+    ])
   })
 
   it("does not record qwerty word results when the bridge is disabled", async () => {
@@ -468,6 +549,10 @@ describe("learning bridge background service", () => {
       client,
     })).resolves.toEqual({
       status: "synced",
+      pendingQwertyChapterRecordCount: 0,
+      flushedCaptureCount: 0,
+      flushedQwertyWordRecordCount: 0,
+      flushedQwertyChapterRecordCount: 0,
       response,
     })
     expect(client.recordQwertyChapter).toHaveBeenCalledWith(expect.objectContaining({
@@ -475,6 +560,46 @@ describe("learning bridge background service", () => {
       chapterIndex: 0,
       accuracy: 0.9,
     }), config)
+  })
+
+  it("queues qwerty chapter results when the daemon is offline", async () => {
+    const { syncLearningQwertyChapterRecord } = await import("../background-service")
+    const { store, getPendingQwertyChapterRecords } = createStore()
+    const client = {
+      getHealth: vi.fn(async () => createHealth()),
+      captureSelection: vi.fn(),
+      recordQwertyWord: vi.fn(),
+      recordQwertyChapter: vi.fn(async () => {
+        throw new Error("daemon offline")
+      }),
+      getWorkspaceState: vi.fn(),
+      getProjection: vi.fn(),
+      getProjectionTerms: vi.fn(),
+    }
+
+    await expect(syncLearningQwertyChapterRecord({
+      dictId: "cet4",
+      chapterIndex: 0,
+      durationMs: 90000,
+      wordCount: 20,
+      correctCount: 18,
+      wrongCount: 2,
+      accuracy: 0.9,
+      correctWordIndexes: [0, 1, 2],
+    }, {
+      store,
+      client,
+    })).resolves.toEqual({
+      status: "queued",
+      pendingQwertyChapterRecordCount: 1,
+      flushedCaptureCount: 0,
+      flushedQwertyWordRecordCount: 0,
+      flushedQwertyChapterRecordCount: 0,
+      error: "daemon offline",
+    })
+    expect(getPendingQwertyChapterRecords()).toEqual([
+      expect.objectContaining({ dictId: "cet4", chapterIndex: 0 }),
+    ])
   })
 
   it("does not record qwerty chapter results when the bridge is disabled", async () => {

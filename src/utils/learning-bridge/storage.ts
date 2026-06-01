@@ -1,12 +1,19 @@
 import type { LearningBridgeConfig, LearningBridgeProjectionCache } from "./types"
-import type { LearningCaptureSelectionRequest } from "@/utils/learning-contracts"
+import type {
+  LearningCaptureSelectionRequest,
+  LearningQwertyChapterRecordRequest,
+  LearningQwertyWordRecordRequest,
+} from "@/utils/learning-contracts"
 import { storage } from "#imports"
 import { LEARNING_DAEMON_DEFAULT_BASE_URL } from "@/utils/learning-contracts"
 
 export const LEARNING_BRIDGE_CONFIG_KEY = "local:learningBridgeConfig"
 export const LEARNING_BRIDGE_PENDING_CAPTURES_KEY = "local:learningBridgePendingCaptures"
+export const LEARNING_BRIDGE_PENDING_QWERTY_WORD_RECORDS_KEY = "local:learningBridgePendingQwertyWordRecords"
+export const LEARNING_BRIDGE_PENDING_QWERTY_CHAPTER_RECORDS_KEY = "local:learningBridgePendingQwertyChapterRecords"
 export const LEARNING_BRIDGE_PROJECTION_CACHE_KEY = "local:learningBridgeProjectionCache"
 export const MAX_PENDING_LEARNING_CAPTURES = 100
+export const MAX_PENDING_LEARNING_QWERTY_RECORDS = 500
 export const MAX_LEARNING_PROJECTION_CACHE_ENTRIES = 5_000
 
 export function getDefaultLearningBridgeConfig(now = new Date().toISOString()): LearningBridgeConfig {
@@ -45,6 +52,42 @@ export async function enqueuePendingLearningCapture(
 ): Promise<LearningCaptureSelectionRequest[]> {
   const next = [...await getPendingLearningCaptures(), capture].slice(-MAX_PENDING_LEARNING_CAPTURES)
   await replacePendingLearningCaptures(next)
+  return next
+}
+
+export async function getPendingLearningQwertyWordRecords(): Promise<LearningQwertyWordRecordRequest[]> {
+  return await storage.getItem<LearningQwertyWordRecordRequest[]>(LEARNING_BRIDGE_PENDING_QWERTY_WORD_RECORDS_KEY) ?? []
+}
+
+export async function replacePendingLearningQwertyWordRecords(
+  records: LearningQwertyWordRecordRequest[],
+): Promise<void> {
+  await storage.setItem(LEARNING_BRIDGE_PENDING_QWERTY_WORD_RECORDS_KEY, records.slice(-MAX_PENDING_LEARNING_QWERTY_RECORDS))
+}
+
+export async function enqueuePendingLearningQwertyWordRecord(
+  record: LearningQwertyWordRecordRequest,
+): Promise<LearningQwertyWordRecordRequest[]> {
+  const next = [...await getPendingLearningQwertyWordRecords(), record].slice(-MAX_PENDING_LEARNING_QWERTY_RECORDS)
+  await replacePendingLearningQwertyWordRecords(next)
+  return next
+}
+
+export async function getPendingLearningQwertyChapterRecords(): Promise<LearningQwertyChapterRecordRequest[]> {
+  return await storage.getItem<LearningQwertyChapterRecordRequest[]>(LEARNING_BRIDGE_PENDING_QWERTY_CHAPTER_RECORDS_KEY) ?? []
+}
+
+export async function replacePendingLearningQwertyChapterRecords(
+  records: LearningQwertyChapterRecordRequest[],
+): Promise<void> {
+  await storage.setItem(LEARNING_BRIDGE_PENDING_QWERTY_CHAPTER_RECORDS_KEY, records.slice(-MAX_PENDING_LEARNING_QWERTY_RECORDS))
+}
+
+export async function enqueuePendingLearningQwertyChapterRecord(
+  record: LearningQwertyChapterRecordRequest,
+): Promise<LearningQwertyChapterRecordRequest[]> {
+  const next = [...await getPendingLearningQwertyChapterRecords(), record].slice(-MAX_PENDING_LEARNING_QWERTY_RECORDS)
+  await replacePendingLearningQwertyChapterRecords(next)
   return next
 }
 

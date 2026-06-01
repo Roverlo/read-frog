@@ -81,7 +81,15 @@ describe("background learning bridge", () => {
     syncLearningCaptureSelectionMock.mockResolvedValue({ status: "queued" })
     syncLearningQwertyWordRecordMock.mockResolvedValue({ status: "synced" })
     syncLearningQwertyChapterRecordMock.mockResolvedValue({ status: "synced" })
-    flushLearningBridgeQueueMock.mockResolvedValue({ status: "flushed", flushedCaptureCount: 0 })
+    flushLearningBridgeQueueMock.mockResolvedValue({
+      status: "flushed",
+      pendingCaptureCount: 0,
+      pendingQwertyWordRecordCount: 0,
+      pendingQwertyChapterRecordCount: 0,
+      flushedCaptureCount: 0,
+      flushedQwertyWordRecordCount: 0,
+      flushedQwertyChapterRecordCount: 0,
+    })
     getLearningProjectionTermsMock.mockResolvedValue({ status: "ok", entries: [] })
     getLearningWorkspaceStateFromDaemonMock.mockResolvedValue({ status: "ok", state: { ok: true } })
     syncLearningProjectionCacheMock.mockResolvedValue({ status: "synced", entryCount: 1, changed: false })
@@ -98,7 +106,12 @@ describe("background learning bridge", () => {
     })).resolves.toEqual({ status: "synced" })
     await expect(getRegisteredMessageHandler("flushLearningBridgeQueue")({ data: {} })).resolves.toEqual({
       status: "flushed",
+      pendingCaptureCount: 0,
+      pendingQwertyWordRecordCount: 0,
+      pendingQwertyChapterRecordCount: 0,
       flushedCaptureCount: 0,
+      flushedQwertyWordRecordCount: 0,
+      flushedQwertyChapterRecordCount: 0,
     })
     await expect(getRegisteredMessageHandler("getLearningProjectionTerms")({
       data: { terms: ["workflow"] },
@@ -208,9 +221,9 @@ describe("background learning bridge", () => {
     expect(sendMessageMock).toHaveBeenCalledTimes(1)
   })
 
-  it("does not refresh translated tabs after an offline qwerty word record", async () => {
+  it("does not refresh translated tabs after a queued qwerty word record", async () => {
     syncLearningQwertyWordRecordMock.mockResolvedValue({
-      status: "offline",
+      status: "queued",
     })
 
     const { setupLearningBridgeMessageHandlers } = await import("../learning-bridge")
@@ -221,7 +234,7 @@ describe("background learning bridge", () => {
     await expect(getRegisteredMessageHandler("syncLearningQwertyWordRecord")({
       data: { word: "workflow" },
     })).resolves.toEqual({
-      status: "offline",
+      status: "queued",
     })
 
     expect(syncLearningProjectionCacheMock).not.toHaveBeenCalled()
@@ -253,7 +266,11 @@ describe("background learning bridge", () => {
     flushLearningBridgeQueueMock.mockResolvedValue({
       status: "flushed",
       pendingCaptureCount: 0,
+      pendingQwertyWordRecordCount: 0,
+      pendingQwertyChapterRecordCount: 0,
       flushedCaptureCount: 2,
+      flushedQwertyWordRecordCount: 0,
+      flushedQwertyChapterRecordCount: 0,
     })
     syncLearningProjectionCacheMock.mockResolvedValue({
       status: "synced",
@@ -272,7 +289,11 @@ describe("background learning bridge", () => {
     await expect(getRegisteredMessageHandler("flushLearningBridgeQueue")({ data: {} })).resolves.toEqual({
       status: "flushed",
       pendingCaptureCount: 0,
+      pendingQwertyWordRecordCount: 0,
+      pendingQwertyChapterRecordCount: 0,
       flushedCaptureCount: 2,
+      flushedQwertyWordRecordCount: 0,
+      flushedQwertyChapterRecordCount: 0,
     })
 
     expect(syncLearningProjectionCacheMock).toHaveBeenCalledOnce()
@@ -283,7 +304,11 @@ describe("background learning bridge", () => {
     flushLearningBridgeQueueMock.mockResolvedValue({
       status: "flushed",
       pendingCaptureCount: 0,
+      pendingQwertyWordRecordCount: 0,
+      pendingQwertyChapterRecordCount: 0,
       flushedCaptureCount: 0,
+      flushedQwertyWordRecordCount: 0,
+      flushedQwertyChapterRecordCount: 0,
     })
 
     const { setupLearningBridgeMessageHandlers } = await import("../learning-bridge")
@@ -294,7 +319,11 @@ describe("background learning bridge", () => {
     await expect(getRegisteredMessageHandler("flushLearningBridgeQueue")({ data: {} })).resolves.toEqual({
       status: "flushed",
       pendingCaptureCount: 0,
+      pendingQwertyWordRecordCount: 0,
+      pendingQwertyChapterRecordCount: 0,
       flushedCaptureCount: 0,
+      flushedQwertyWordRecordCount: 0,
+      flushedQwertyChapterRecordCount: 0,
     })
 
     expect(syncLearningProjectionCacheMock).not.toHaveBeenCalled()
