@@ -63,7 +63,26 @@ describe("learning daemon server", () => {
     expect(response.headers.get("content-type")).toContain("text/html")
     const html = await response.text()
     expect(html).toContain("data-readfrog-learning-workspace")
-    expect(html).toContain("/api/v1/workspace/state")
+    expect(html).toContain("/workspace/app.css")
+    expect(html).toContain("/workspace/app.js")
+  })
+
+  it("serves workspace static assets without exposing arbitrary files", async () => {
+    const [cssResponse, jsResponse, missingResponse] = await Promise.all([
+      fetch(`${baseUrl}/workspace/app.css`),
+      fetch(`${baseUrl}/workspace/app.js`),
+      fetch(`${baseUrl}/workspace/../src/server.ts`),
+    ])
+
+    expect(cssResponse.status).toBe(200)
+    expect(cssResponse.headers.get("content-type")).toContain("text/css")
+    await expect(cssResponse.text()).resolves.toContain(".workspace")
+
+    expect(jsResponse.status).toBe(200)
+    expect(jsResponse.headers.get("content-type")).toContain("text/javascript")
+    await expect(jsResponse.text()).resolves.toContain("/api/v1/workspace/state")
+
+    expect(missingResponse.status).toBe(404)
   })
 
   it("stores selection captures and exposes a mastery projection", async () => {

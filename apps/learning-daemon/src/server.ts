@@ -28,7 +28,11 @@ import {
   readQwertyDictionaryRawJson,
 } from "./qwerty-dictionaries.ts"
 import { normalizeLearningDaemonText } from "./store.ts"
-import { readLearningWorkspaceHtml } from "./workspace.ts"
+import {
+  getLearningWorkspaceAssetContentType,
+  readLearningWorkspaceAsset,
+  readLearningWorkspaceHtml,
+} from "./workspace.ts"
 
 export interface LearningDaemonServerOptions {
   store: LearningDaemonStore
@@ -75,6 +79,12 @@ function sendJson(response: ServerResponse, statusCode: number, body: unknown) {
 function sendHtml(response: ServerResponse, statusCode: number, body: string) {
   response.statusCode = statusCode
   response.setHeader("content-type", "text/html; charset=utf-8")
+  response.end(body)
+}
+
+function sendText(response: ServerResponse, statusCode: number, contentType: string, body: string) {
+  response.statusCode = statusCode
+  response.setHeader("content-type", contentType)
   response.end(body)
 }
 
@@ -252,6 +262,15 @@ export function createLearningDaemonServer(options: LearningDaemonServerOptions)
       if (request.method === "GET" && (path === "/" || path === "/workspace")) {
         sendHtml(response, 200, await readLearningWorkspaceHtml())
         return
+      }
+
+      if (request.method === "GET" && path.startsWith("/workspace/")) {
+        const asset = await readLearningWorkspaceAsset(path)
+        const contentType = getLearningWorkspaceAssetContentType(path)
+        if (asset !== undefined && contentType) {
+          sendText(response, 200, contentType, asset)
+          return
+        }
       }
 
       if (request.method === "GET" && path === "/api/v1/health") {
