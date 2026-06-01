@@ -68,3 +68,10 @@ docker compose -f apps/learning-daemon/compose.yaml up --build
 ```
 
 The compose file exposes `127.0.0.1:7457` and stores daemon state in a named Docker volume.
+The image and compose service include a health check against `GET /api/v1/health`, so the service should report `healthy` after the API is ready:
+
+```powershell
+docker compose -f apps/learning-daemon/compose.yaml ps
+```
+
+The extension should keep using `http://127.0.0.1:7457` as the bridge base URL. The daemon owns qwerty dictionaries, practice records, captures, and the mastery projection; the extension should only capture, request projection terms, and refresh its local bridge cache.
