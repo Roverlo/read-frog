@@ -58,6 +58,28 @@ export const learningDaemonHealthResponseSchema = z.object({
   paired: z.boolean().optional(),
 })
 
+const learningDaemonEventBaseSchema = z.object({
+  eventId: z.string().trim().min(1),
+  projectionVersion: z.string().optional(),
+  createdAt: z.string().datetime(),
+})
+
+export const learningDaemonProjectionUpdatedEventSchema = learningDaemonEventBaseSchema.extend({
+  type: z.literal("projection.updated"),
+  changedTerms: z.array(z.string()).default([]),
+})
+
+export const learningDaemonQwertySessionFinishedEventSchema = learningDaemonEventBaseSchema.extend({
+  type: z.literal("qwerty.session.finished"),
+  sessionId: z.string().trim().min(1),
+  changedTerms: z.array(z.string()).default([]),
+})
+
+export const learningDaemonEventSchema = z.discriminatedUnion("type", [
+  learningDaemonProjectionUpdatedEventSchema,
+  learningDaemonQwertySessionFinishedEventSchema,
+])
+
 export const masteryProjectionEntrySchema = z.object({
   normalizedText: z.string().trim().min(1),
   kind: learningItemKindSchema,
@@ -250,6 +272,7 @@ export type LearningCaptureExtractedItem = z.infer<typeof learningCaptureExtract
 export type LearningCaptureSelectionInput = z.input<typeof learningCaptureSelectionInputSchema>
 export type LearningCaptureSelectionRequest = z.infer<typeof learningCaptureSelectionRequestSchema>
 export type LearningCaptureSelectionResponse = z.infer<typeof learningCaptureSelectionResponseSchema>
+export type LearningDaemonEvent = z.infer<typeof learningDaemonEventSchema>
 export type LearningDaemonHealthResponse = z.infer<typeof learningDaemonHealthResponseSchema>
 export type LearningQwertyMistake = z.infer<typeof learningQwertyMistakeSchema>
 export type LearningQwertyDictionariesResponse = z.infer<typeof learningQwertyDictionariesResponseSchema>

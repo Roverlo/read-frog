@@ -23,17 +23,22 @@ export interface LearningDaemonStoreState {
 export interface CaptureSelectionResult {
   itemIds: string[]
   projectionVersion: string
+  eventId: string
+  changedTerms: string[]
 }
 
 export interface RecordQwertyWordResult {
   itemId: string
   projectionVersion: string
+  eventId: string
+  changedTerms: string[]
   entry: MasteryProjectionEntry
 }
 
 export interface RecordQwertyChapterResult {
   recordId: string
   projectionVersion: string
+  eventId: string
 }
 
 export interface LearningDaemonStore {
@@ -361,7 +366,12 @@ export function createFileLearningDaemonStore(dataDir: string): LearningDaemonSt
         entries,
       })
 
-      return { itemIds, projectionVersion }
+      return {
+        itemIds,
+        projectionVersion,
+        eventId,
+        changedTerms: projectionEntriesFromCapture(capture).map(entry => entry.normalizedText),
+      }
     },
 
     async recordQwertyWord(record) {
@@ -399,7 +409,13 @@ export function createFileLearningDaemonStore(dataDir: string): LearningDaemonSt
         entries,
       })
 
-      return { itemId, projectionVersion, entry }
+      return {
+        itemId,
+        projectionVersion,
+        eventId,
+        changedTerms: [entry.normalizedText],
+        entry,
+      }
     },
 
     async recordQwertyChapter(record) {
@@ -423,7 +439,7 @@ export function createFileLearningDaemonStore(dataDir: string): LearningDaemonSt
         qwertyChapterRecords: [...state.qwertyChapterRecords, recordWithCreatedAt],
       })
 
-      return { recordId, projectionVersion }
+      return { recordId, projectionVersion, eventId }
     },
   }
 }

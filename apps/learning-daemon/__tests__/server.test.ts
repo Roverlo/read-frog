@@ -18,6 +18,41 @@ async function listen(server: Server) {
   return `http://127.0.0.1:${address.port}`
 }
 
+async function readSseEvent(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  expectedType: string,
+) {
+  const decoder = new TextDecoder()
+  let buffer = ""
+  const deadline = Date.now() + 3_000
+
+  while (Date.now() < deadline) {
+    const result = await Promise.race([
+      reader.read(),
+      new Promise<ReadableStreamReadResult<Uint8Array>>((_, reject) => {
+        setTimeout(() => reject(new Error("Timed out waiting for SSE event")), 250)
+      }),
+    ])
+    if (result.done) {
+      break
+    }
+
+    buffer += decoder.decode(result.value, { stream: true })
+    const chunks = buffer.split("\n\n")
+    buffer = chunks.pop() ?? ""
+
+    for (const chunk of chunks) {
+      const eventType = /^event: (.+)$/m.exec(chunk)?.[1]
+      const data = /^data: (.+)$/m.exec(chunk)?.[1]
+      if (eventType === expectedType && data) {
+        return JSON.parse(data) as unknown
+      }
+    }
+  }
+
+  throw new Error(`Expected SSE event ${expectedType}`)
+}
+
 describe("learning daemon server", () => {
   let dataDir: string
   let server: Server
@@ -87,6 +122,46 @@ describe("learning daemon server", () => {
     expect(js).toContain("/api/v1/qwerty/dictionaries/")
 
     expect(missingResponse.status).toBe(404)
+  })
+
+  it("streams daemon events after projection changes", async () => {
+    const eventsResponse = await fetch(`${baseUrl}/api/v1/events`)
+    expect(eventsResponse.status).toBe(200)
+    expect(eventsResponse.headers.get("content-type")).toContain("text/event-stream")
+
+    const reader = eventsResponse.body?.getReader()
+    if (!reader) {
+      throw new Error("Expected an SSE response body")
+    }
+
+    try {
+      await fetch(`${baseUrl}/api/v1/capture/selection`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: new Blob([JSON.stringify({
+          id: "capture-event",
+          text: "repeatable workflow",
+          createdAt: "2026-06-01T00:00:00.000Z",
+          extractedItems: [
+            {
+              text: "workflow",
+              kind: "word",
+              explanation: { meaningZh: "workflow definition" },
+            },
+          ],
+        })]),
+      })
+
+      await expect(readSseEvent(reader, "projection.updated")).resolves.toMatchObject({
+        type: "projection.updated",
+        eventId: "event-1",
+        projectionVersion: "projection-1",
+        changedTerms: ["repeatable workflow", "workflow"],
+      })
+    }
+    finally {
+      await reader.cancel()
+    }
   })
 
   it("stores selection captures and exposes a mastery projection", async () => {

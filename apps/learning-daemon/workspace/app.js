@@ -17,6 +17,9 @@
         recordedChapterKeys: [],
       },
       startedAt: Date.now(),
+      eventSource: null,
+      eventRefreshTimer: null,
+      eventPollTimer: null,
     };
 
     const $ = (id) => document.getElementById(id);
@@ -357,6 +360,7 @@
           await loadDictionaryChapter(state.dictionaryId, state.chapterIndex);
         }
         setText("toast", "");
+        connectEvents();
       }
       catch (error) {
         state.health = null;
@@ -364,6 +368,38 @@
         setText("toast", error instanceof Error ? error.message : String(error));
       }
       render();
+    }
+
+    function scheduleEventRefresh() {
+      if (state.eventRefreshTimer) {
+        clearTimeout(state.eventRefreshTimer);
+      }
+      state.eventRefreshTimer = setTimeout(() => {
+        state.eventRefreshTimer = null;
+        void refresh();
+      }, 120);
+    }
+
+    function connectEvents() {
+      if (state.eventSource) {
+        return;
+      }
+      if (!("EventSource" in window)) {
+        if (!state.eventPollTimer) {
+          state.eventPollTimer = setInterval(() => {
+            void refresh();
+          }, 5000);
+        }
+        return;
+      }
+      const source = new EventSource("/api/v1/events");
+      state.eventSource = source;
+      source.addEventListener("projection.updated", scheduleEventRefresh);
+      source.addEventListener("qwerty.session.finished", scheduleEventRefresh);
+      source.onerror = () => {
+        source.close();
+        state.eventSource = null;
+      };
     }
 
     async function loadDictionaryChapter(dictId, chapterIndex) {

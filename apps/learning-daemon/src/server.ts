@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type {
   LearningCaptureSelectionRequest,
+  LearningDaemonEvent,
   LearningDaemonHealthResponse,
   LearningQwertyChapterRecordRequest,
   LearningQwertyWordRecordRequest,
@@ -14,6 +15,7 @@ import {
   LEARNING_DAEMON_SERVICE,
   learningCaptureSelectionRequestSchema,
   learningCaptureSelectionResponseSchema,
+  learningDaemonEventSchema,
   learningDaemonHealthResponseSchema,
   learningQwertyChapterRecordRequestSchema,
   learningQwertyChapterRecordResponseSchema,
@@ -127,6 +129,63 @@ function getRequestUrl(request: IncomingMessage) {
   return new URL(request.url ?? "/", "http://127.0.0.1")
 }
 
+interface LearningDaemonEventHub {
+  addClient: (response: ServerResponse) => void
+  publish: (event: LearningDaemonEvent) => void
+}
+
+function createLearningDaemonEventHub(): LearningDaemonEventHub {
+  const clients = new Set<ServerResponse>()
+
+  function writeEvent(response: ServerResponse, eventName: string, data: unknown) {
+    response.write(`event: ${eventName}\n`)
+    response.write(`data: ${JSON.stringify(data)}\n\n`)
+  }
+
+  return {
+    addClient(response) {
+      response.statusCode = 200
+      response.setHeader("content-type", "text/event-stream; charset=utf-8")
+      response.setHeader("cache-control", "no-cache, no-transform")
+      response.setHeader("connection", "keep-alive")
+      response.flushHeaders()
+      response.write(": connected\n\n")
+
+      clients.add(response)
+      response.on("close", () => {
+        clients.delete(response)
+      })
+    },
+
+    publish(event) {
+      const body = learningDaemonEventSchema.parse(event)
+      for (const client of clients) {
+        writeEvent(client, body.type, body)
+      }
+    },
+  }
+}
+
+function publishProjectionUpdated(
+  events: LearningDaemonEventHub,
+  input: {
+    eventId?: string
+    projectionVersion: string
+    changedTerms: string[]
+  },
+) {
+  if (!input.eventId) {
+    return
+  }
+  events.publish({
+    type: "projection.updated",
+    eventId: input.eventId,
+    projectionVersion: input.projectionVersion,
+    changedTerms: input.changedTerms,
+    createdAt: new Date().toISOString(),
+  })
+}
+
 async function handleHealth(store: LearningDaemonStore, response: ServerResponse) {
   const state = await store.getState()
   const body: LearningDaemonHealthResponse = learningDaemonHealthResponseSchema.parse({
@@ -182,6 +241,7 @@ async function handleCaptureSelection(
   response: ServerResponse,
   store: LearningDaemonStore,
   maxBodyBytes: number,
+  events: LearningDaemonEventHub,
 ) {
   const capture: LearningCaptureSelectionRequest = learningCaptureSelectionRequestSchema.parse(
     await readJsonBody(request, maxBodyBytes),
@@ -192,6 +252,11 @@ async function handleCaptureSelection(
     itemIds: result.itemIds,
     projectionVersion: result.projectionVersion,
   }))
+  publishProjectionUpdated(events, {
+    eventId: result.eventId,
+    projectionVersion: result.projectionVersion,
+    changedTerms: result.changedTerms,
+  })
 }
 
 async function handleQwertyWordRecord(
@@ -199,6 +264,7 @@ async function handleQwertyWordRecord(
   response: ServerResponse,
   store: LearningDaemonStore,
   maxBodyBytes: number,
+  events: LearningDaemonEventHub,
 ) {
   const record: LearningQwertyWordRecordRequest = learningQwertyWordRecordRequestSchema.parse(
     await readJsonBody(request, maxBodyBytes),
@@ -210,6 +276,11 @@ async function handleQwertyWordRecord(
     projectionVersion: result.projectionVersion,
     entry: result.entry,
   }))
+  publishProjectionUpdated(events, {
+    eventId: result.eventId,
+    projectionVersion: result.projectionVersion,
+    changedTerms: result.changedTerms,
+  })
 }
 
 async function handleQwertyChapterRecord(
@@ -217,6 +288,7 @@ async function handleQwertyChapterRecord(
   response: ServerResponse,
   store: LearningDaemonStore,
   maxBodyBytes: number,
+  events: LearningDaemonEventHub,
 ) {
   const record: LearningQwertyChapterRecordRequest = learningQwertyChapterRecordRequestSchema.parse(
     await readJsonBody(request, maxBodyBytes),
@@ -227,6 +299,14 @@ async function handleQwertyChapterRecord(
     recordId: result.recordId,
     projectionVersion: result.projectionVersion,
   }))
+  events.publish({
+    type: "qwerty.session.finished",
+    eventId: result.eventId,
+    projectionVersion: result.projectionVersion,
+    sessionId: result.recordId,
+    changedTerms: [],
+    createdAt: new Date().toISOString(),
+  })
 }
 
 function handleQwertyDictionaries(response: ServerResponse) {
@@ -265,6 +345,7 @@ async function handleQwertyRawDictionary(fileName: string, response: ServerRespo
 export function createLearningDaemonServer(options: LearningDaemonServerOptions) {
   const allowedOrigins = options.allowedOrigins ?? DEFAULT_ALLOWED_ORIGINS
   const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES
+  const events = createLearningDaemonEventHub()
 
   return createServer((request, response) => {
     setCorsHeaders(request, response, allowedOrigins)
@@ -295,6 +376,11 @@ export function createLearningDaemonServer(options: LearningDaemonServerOptions)
 
       if (request.method === "GET" && path === "/api/v1/health") {
         await handleHealth(options.store, response)
+        return
+      }
+
+      if (request.method === "GET" && path === "/api/v1/events") {
+        events.addClient(response)
         return
       }
 
@@ -335,17 +421,17 @@ export function createLearningDaemonServer(options: LearningDaemonServerOptions)
       }
 
       if (request.method === "POST" && path === "/api/v1/capture/selection") {
-        await handleCaptureSelection(request, response, options.store, maxBodyBytes)
+        await handleCaptureSelection(request, response, options.store, maxBodyBytes, events)
         return
       }
 
       if (request.method === "POST" && path === "/api/v1/qwerty/records/word") {
-        await handleQwertyWordRecord(request, response, options.store, maxBodyBytes)
+        await handleQwertyWordRecord(request, response, options.store, maxBodyBytes, events)
         return
       }
 
       if (request.method === "POST" && path === "/api/v1/qwerty/records/chapter") {
-        await handleQwertyChapterRecord(request, response, options.store, maxBodyBytes)
+        await handleQwertyChapterRecord(request, response, options.store, maxBodyBytes, events)
         return
       }
 

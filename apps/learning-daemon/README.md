@@ -38,6 +38,7 @@ Useful environment variables:
 ## API
 
 - `GET /api/v1/health`
+- `GET /api/v1/events`
 - `GET /api/v1/workspace/state`
 - `GET /api/v1/projection`
 - `GET /api/v1/projection/terms?terms=workflow,ability`
@@ -55,6 +56,8 @@ After three consecutive high-accuracy correct records for the same word, the pro
 `POST /api/v1/qwerty/records/chapter` records chapter-level practice results: dictionary, chapter index, duration, word count, correct/wrong counts, accuracy, and correct word indexes. This mirrors qwerty-learner's chapter analytics without requiring the extension to own those records.
 
 `GET /api/v1/workspace/state` returns daemon-owned workspace summaries: recent extension captures, recent qwerty word records, and mastery distribution stats. The workspace UI uses this endpoint instead of reconstructing state from the projection table.
+
+`GET /api/v1/events` is an SSE stream. The daemon emits `projection.updated` after selection captures and qwerty word records, and `qwerty.session.finished` after chapter records. The workspace subscribes to these events and refreshes itself after container-side or extension-side learning data changes.
 
 Qwerty dictionary assets are now daemon/container assets under `apps/learning-daemon/dicts/qwerty`. The extension uses the daemon API instead of packaging these large JSON dictionaries into `public/`.
 
