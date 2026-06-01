@@ -151,6 +151,9 @@ const checks = [
     if (!source.includes("syncLearningQwertyWordRecord")) {
       failures.push("qwerty-typing.ts must write through syncLearningQwertyWordRecord")
     }
+    if (!source.includes("syncLearningQwertyChapterRecord")) {
+      failures.push("qwerty-typing.ts must write chapter records through syncLearningQwertyChapterRecord")
+    }
     if (includesAny(source, localLearningWritePatterns)) {
       failures.push("qwerty-typing.ts imports or writes local learning persistence")
     }
@@ -201,6 +204,7 @@ const checks = [
       "setupLearningProjectionSyncAlarm",
       "syncLearningCaptureSelection",
       "syncLearningQwertyWordRecord",
+      "syncLearningQwertyChapterRecord",
       "getLearningProjectionTerms",
       "syncLearningProjectionCache",
     ]

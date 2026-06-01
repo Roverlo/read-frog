@@ -80,6 +80,7 @@ describe("learning bridge background service", () => {
       getHealth: vi.fn(async () => createHealth()),
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
+      recordQwertyChapter: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -102,6 +103,7 @@ describe("learning bridge background service", () => {
         throw new Error("daemon offline")
       }),
       recordQwertyWord: vi.fn(),
+      recordQwertyChapter: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -147,6 +149,7 @@ describe("learning bridge background service", () => {
         syncedIds.push(capture.id)
       }),
       recordQwertyWord: vi.fn(),
+      recordQwertyChapter: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -177,6 +180,7 @@ describe("learning bridge background service", () => {
       getHealth: vi.fn(async () => createHealth()),
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
+      recordQwertyChapter: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(async (terms: string[]) => ({
@@ -223,6 +227,7 @@ describe("learning bridge background service", () => {
       }),
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
+      recordQwertyChapter: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -259,6 +264,7 @@ describe("learning bridge background service", () => {
       }),
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
+      recordQwertyChapter: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -279,6 +285,7 @@ describe("learning bridge background service", () => {
       getHealth: vi.fn(async () => createHealth()),
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
+      recordQwertyChapter: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(async () => ({
         ok: true as const,
@@ -327,6 +334,7 @@ describe("learning bridge background service", () => {
       getHealth: vi.fn(async () => createHealth()),
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
+      recordQwertyChapter: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(async () => ({
         ok: true as const,
@@ -368,6 +376,7 @@ describe("learning bridge background service", () => {
       getHealth: vi.fn(async () => createHealth()),
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(async () => response),
+      recordQwertyChapter: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -404,6 +413,7 @@ describe("learning bridge background service", () => {
       getHealth: vi.fn(),
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
+      recordQwertyChapter: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -423,6 +433,83 @@ describe("learning bridge background service", () => {
       status: "disabled",
     })
     expect(client.recordQwertyWord).not.toHaveBeenCalled()
+  })
+
+  it("records qwerty chapter results through the connected daemon", async () => {
+    const { syncLearningQwertyChapterRecord } = await import("../background-service")
+    const { store } = createStore()
+    const response = {
+      ok: true as const,
+      recordId: "cet4:chapter:0:1",
+      projectionVersion: "projection-5",
+    }
+    const client = {
+      getHealth: vi.fn(async () => createHealth()),
+      captureSelection: vi.fn(),
+      recordQwertyWord: vi.fn(),
+      recordQwertyChapter: vi.fn(async () => response),
+      getWorkspaceState: vi.fn(),
+      getProjection: vi.fn(),
+      getProjectionTerms: vi.fn(),
+    }
+
+    await expect(syncLearningQwertyChapterRecord({
+      dictId: "cet4",
+      dictName: "CET-4",
+      chapterIndex: 0,
+      durationMs: 90000,
+      wordCount: 20,
+      correctCount: 18,
+      wrongCount: 2,
+      accuracy: 0.9,
+      correctWordIndexes: [0, 1, 2],
+    }, {
+      store,
+      client,
+    })).resolves.toEqual({
+      status: "synced",
+      response,
+    })
+    expect(client.recordQwertyChapter).toHaveBeenCalledWith(expect.objectContaining({
+      dictId: "cet4",
+      chapterIndex: 0,
+      accuracy: 0.9,
+    }), config)
+  })
+
+  it("does not record qwerty chapter results when the bridge is disabled", async () => {
+    const { syncLearningQwertyChapterRecord } = await import("../background-service")
+    const { store } = createStore()
+    vi.mocked(store.getConfig).mockResolvedValue({
+      ...config,
+      enabled: false,
+    })
+    const client = {
+      getHealth: vi.fn(),
+      captureSelection: vi.fn(),
+      recordQwertyWord: vi.fn(),
+      recordQwertyChapter: vi.fn(),
+      getWorkspaceState: vi.fn(),
+      getProjection: vi.fn(),
+      getProjectionTerms: vi.fn(),
+    }
+
+    await expect(syncLearningQwertyChapterRecord({
+      dictId: "cet4",
+      chapterIndex: 0,
+      durationMs: 90000,
+      wordCount: 20,
+      correctCount: 18,
+      wrongCount: 2,
+      accuracy: 0.9,
+      correctWordIndexes: [0, 1, 2],
+    }, {
+      store,
+      client,
+    })).resolves.toEqual({
+      status: "disabled",
+    })
+    expect(client.recordQwertyChapter).not.toHaveBeenCalled()
   })
 
   it("reads workspace state through the connected daemon", async () => {
@@ -456,6 +543,7 @@ describe("learning bridge background service", () => {
       getHealth: vi.fn(async () => createHealth()),
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
+      recordQwertyChapter: vi.fn(),
       getWorkspaceState: vi.fn(async () => state),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),

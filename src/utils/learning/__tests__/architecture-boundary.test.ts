@@ -48,8 +48,10 @@ describe("learning workspace architecture boundary", () => {
 
     expectNoLocalLearningWrites(source)
     expect(source).toContain("syncLearningQwertyWordRecord")
+    expect(source).toContain("syncLearningQwertyChapterRecord")
     expect(source).toContain("getLearningWorkspaceState")
     expect(source).not.toMatch(/postLearningQwertyWordRecord/)
+    expect(source).not.toMatch(/postLearningQwertyChapterRecord/)
   })
 
   it("keeps selection learning captures behind the extension-to-daemon bridge", async () => {

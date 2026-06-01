@@ -1,6 +1,7 @@
 import type {
   LearningCaptureSelectionRequest,
   LearningDaemonHealthResponse,
+  LearningQwertyChapterRecordResponse,
   LearningQwertyWordRecordResponse,
   LearningWorkspaceStateResponse,
   MasteryProjectionEntry,
@@ -60,6 +61,12 @@ export interface LearningBridgeProjectionSyncResult {
 export interface LearningBridgeQwertyWordRecordResult {
   status: "synced" | "offline" | "disabled" | "incompatible"
   response?: LearningQwertyWordRecordResponse
+  error?: string
+}
+
+export interface LearningBridgeQwertyChapterRecordResult {
+  status: "synced" | "offline" | "disabled" | "incompatible"
+  response?: LearningQwertyChapterRecordResponse
   error?: string
 }
 

@@ -119,6 +119,54 @@ describe("qwerty-typing", () => {
     }
   })
 
+  it("saves chapter records through the learning daemon bridge", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-01T00:00:00.000Z"))
+    try {
+      const { saveQwertyChapterResult } = await import("../qwerty-typing")
+
+      await saveQwertyChapterResult({
+        dict: {
+          id: "cet4",
+          name: "CET-4",
+          description: "College English Test Band 4 core vocabulary",
+          category: "Chinese exams",
+          tags: ["CET-4"],
+          length: 2607,
+          chapterLength: 20,
+          chapterCount: 131,
+          language: "en",
+        },
+        chapterIndex: 0,
+        durationMs: 98765.4,
+        wordCount: 20,
+        correctCount: 18,
+        wrongCount: 2,
+        correctWordIndexes: [2, 1, 2, 0],
+      })
+
+      expect(sendMessageMock).toHaveBeenCalledWith("syncLearningQwertyChapterRecord", {
+        id: "record-1",
+        dictId: "cet4",
+        dictName: "CET-4",
+        chapterIndex: 0,
+        durationMs: 98765,
+        wordCount: 20,
+        correctCount: 18,
+        wrongCount: 2,
+        accuracy: 0.9,
+        correctWordIndexes: [0, 1, 2],
+        createdAt: "2026-06-01T00:00:00.000Z",
+      })
+      expect(addQwertyRecordMock).not.toHaveBeenCalled()
+      expect(upsertLearningItemMock).not.toHaveBeenCalled()
+      expect(markLearningItemReviewRatingMock).not.toHaveBeenCalled()
+    }
+    finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("reads qwerty typing stats from daemon workspace state", async () => {
     sendMessageMock.mockResolvedValue({
       status: "ok",

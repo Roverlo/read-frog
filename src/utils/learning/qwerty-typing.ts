@@ -1,5 +1,5 @@
 import type { QwertyDictResource, QwertyTypingResult, QwertyWordWithIndex } from "./qwerty-dicts"
-import type { LearningQwertyWordRecordRequest } from "@/utils/learning-contracts"
+import type { LearningQwertyChapterRecordRequest, LearningQwertyWordRecordRequest } from "@/utils/learning-contracts"
 import { getRandomUUID } from "@/utils/crypto-polyfill"
 import { sendMessage } from "@/utils/message"
 import { getWordMeaning } from "./qwerty-dicts"
@@ -29,6 +29,38 @@ export async function saveQwertyTypingResult(input: {
   }
 
   const result = await sendMessage("syncLearningQwertyWordRecord", record)
+  return { record, result }
+}
+
+export async function saveQwertyChapterResult(input: {
+  dict: QwertyDictResource
+  chapterIndex: number
+  durationMs: number
+  wordCount: number
+  correctCount: number
+  wrongCount: number
+  correctWordIndexes: number[]
+}) {
+  const accuracy = input.wordCount > 0
+    ? input.correctCount / input.wordCount
+    : 0
+  const record: LearningQwertyChapterRecordRequest = {
+    id: getRandomUUID(),
+    dictId: input.dict.id,
+    dictName: input.dict.name,
+    chapterIndex: input.chapterIndex,
+    durationMs: Math.max(0, Math.round(input.durationMs)),
+    wordCount: Math.max(0, Math.round(input.wordCount)),
+    correctCount: Math.max(0, Math.round(input.correctCount)),
+    wrongCount: Math.max(0, Math.round(input.wrongCount)),
+    accuracy: Math.max(0, Math.min(1, accuracy)),
+    correctWordIndexes: [...new Set(input.correctWordIndexes)]
+      .filter(index => Number.isInteger(index) && index >= 0)
+      .sort((a, b) => a - b),
+    createdAt: new Date().toISOString(),
+  }
+
+  const result = await sendMessage("syncLearningQwertyChapterRecord", record)
   return { record, result }
 }
 

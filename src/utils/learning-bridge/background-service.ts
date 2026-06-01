@@ -4,6 +4,7 @@ import type {
   LearningBridgeFlushResult,
   LearningBridgeProjectionSyncResult,
   LearningBridgeProjectionTermsResult,
+  LearningBridgeQwertyChapterRecordResult,
   LearningBridgeQwertyWordRecordResult,
   LearningBridgeStatus,
   LearningBridgeWorkspaceStateResult,
@@ -13,6 +14,8 @@ import type {
   LearningCaptureSelectionInput,
   LearningCaptureSelectionRequest,
   LearningDaemonHealthResponse,
+  LearningQwertyChapterRecordRequest,
+  LearningQwertyChapterRecordResponse,
   LearningQwertyWordRecordRequest,
   LearningQwertyWordRecordResponse,
   LearningWorkspaceStateResponse,
@@ -29,6 +32,7 @@ import {
   getLearningMasteryProjectionTerms,
   getLearningWorkspaceState,
   postLearningCaptureSelection,
+  postLearningQwertyChapterRecord,
   postLearningQwertyWordRecord,
 } from "./daemon-client"
 import {
@@ -44,6 +48,7 @@ export interface LearningDaemonBridgeClient {
   getHealth: (config: LearningBridgeConfig) => Promise<LearningDaemonHealthResponse>
   captureSelection: (capture: LearningCaptureSelectionRequest, config: LearningBridgeConfig) => Promise<unknown>
   recordQwertyWord: (record: LearningQwertyWordRecordRequest, config: LearningBridgeConfig) => Promise<LearningQwertyWordRecordResponse>
+  recordQwertyChapter: (record: LearningQwertyChapterRecordRequest, config: LearningBridgeConfig) => Promise<LearningQwertyChapterRecordResponse>
   getWorkspaceState: (config: LearningBridgeConfig) => Promise<LearningWorkspaceStateResponse>
   getProjection: (config: LearningBridgeConfig) => Promise<MasteryProjectionResponse>
   getProjectionTerms: (terms: string[], config: LearningBridgeConfig) => Promise<MasteryProjectionResponse>
@@ -78,6 +83,10 @@ function getDefaultClient(): LearningDaemonBridgeClient {
       token: config.token,
     }),
     recordQwertyWord: (record, config) => postLearningQwertyWordRecord(record, {
+      baseUrl: config.baseUrl,
+      token: config.token,
+    }),
+    recordQwertyChapter: (record, config) => postLearningQwertyChapterRecord(record, {
       baseUrl: config.baseUrl,
       token: config.token,
     }),
@@ -413,6 +422,41 @@ export async function syncLearningQwertyWordRecord(
     return {
       status: "synced",
       response: await client.recordQwertyWord(record, config),
+    }
+  }
+  catch (error) {
+    return {
+      status: "offline",
+      error: getErrorMessage(error),
+    }
+  }
+}
+
+export async function syncLearningQwertyChapterRecord(
+  record: LearningQwertyChapterRecordRequest,
+  deps: LearningBridgeServiceDeps = {},
+): Promise<LearningBridgeQwertyChapterRecordResult> {
+  const { store, client } = getDeps(deps)
+  const config = await store.getConfig()
+
+  if (!config.enabled) {
+    return {
+      status: "disabled",
+    }
+  }
+
+  try {
+    const health = await client.getHealth(config)
+    if (getHealthState(health) !== "connected") {
+      return {
+        status: "incompatible",
+        error: `Expected contract ${LEARNING_CONTRACT_VERSION}, got ${health.contractVersion}`,
+      }
+    }
+
+    return {
+      status: "synced",
+      response: await client.recordQwertyChapter(record, config),
     }
   }
   catch (error) {

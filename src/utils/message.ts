@@ -24,11 +24,12 @@ import type {
   LearningBridgeFlushResult,
   LearningBridgeProjectionSyncResult,
   LearningBridgeProjectionTermsResult,
+  LearningBridgeQwertyChapterRecordResult,
   LearningBridgeQwertyWordRecordResult,
   LearningBridgeStatus,
   LearningBridgeWorkspaceStateResult,
 } from "@/utils/learning-bridge"
-import type { LearningCaptureSelectionInput, LearningQwertyWordRecordRequest } from "@/utils/learning-contracts"
+import type { LearningCaptureSelectionInput, LearningQwertyChapterRecordRequest, LearningQwertyWordRecordRequest } from "@/utils/learning-contracts"
 import type { EdgeTTSVoice } from "@/utils/server/edge-tts/types"
 import { defineExtensionMessaging } from "@webext-core/messaging"
 
@@ -84,6 +85,7 @@ interface ProtocolMap {
   getLearningBridgeStatus: () => Promise<LearningBridgeStatus>
   syncLearningCaptureSelection: (data: LearningCaptureSelectionInput) => Promise<LearningBridgeCaptureResult>
   syncLearningQwertyWordRecord: (data: LearningQwertyWordRecordRequest) => Promise<LearningBridgeQwertyWordRecordResult>
+  syncLearningQwertyChapterRecord: (data: LearningQwertyChapterRecordRequest) => Promise<LearningBridgeQwertyChapterRecordResult>
   getLearningWorkspaceState: () => Promise<LearningBridgeWorkspaceStateResult>
   flushLearningBridgeQueue: () => Promise<LearningBridgeFlushResult>
   getLearningProjectionTerms: (data: { terms: string[] }) => Promise<LearningBridgeProjectionTermsResult>

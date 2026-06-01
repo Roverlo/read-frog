@@ -5,6 +5,7 @@ import {
   getLearningProjectionTerms,
   getLearningWorkspaceStateFromDaemon,
   syncLearningCaptureSelection,
+  syncLearningQwertyChapterRecord,
   syncLearningProjectionCache,
   syncLearningQwertyWordRecord,
 } from "@/utils/learning-bridge"
@@ -71,6 +72,10 @@ export function setupLearningBridgeMessageHandlers(
       await refreshLearningProjectionCacheAfterWrite(tabsApi)
     }
     return result
+  })
+
+  onMessage("syncLearningQwertyChapterRecord", async (message) => {
+    return await syncLearningQwertyChapterRecord(message.data)
   })
 
   onMessage("getLearningWorkspaceState", async () => {
