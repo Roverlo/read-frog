@@ -1,11 +1,10 @@
 import type { LearningExplanation, LearningItem, LearningItemKind, LearningItemStatus, LearningReviewRating } from "@/types/learning"
 import { getRandomUUID } from "@/utils/crypto-polyfill"
 import { db } from "@/utils/db/dexie/db"
+import { normalizeLearningText } from "./normalize"
 import { applySrsReview, createInitialSrsCard, getLearningMaturity, isSrsMastered } from "./srs"
 
-export function normalizeLearningText(text: string) {
-  return text.trim().replace(/\s+/g, " ").toLowerCase()
-}
+export { normalizeLearningText } from "./normalize"
 
 export function inferLearningItemKind(text: string): LearningItemKind {
   const trimmed = text.trim()

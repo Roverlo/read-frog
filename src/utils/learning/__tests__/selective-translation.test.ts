@@ -1,31 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-interface MockLearningRow {
-  id: string
-  kind: string
-  normalizedText: string
-  status: string
-  explanation?: {
-    meaningZh?: string
-  }
-}
-
-const mockRows: MockLearningRow[] = []
-const equalsMock = vi.fn(() => ({
-  toArray: vi.fn(async () => mockRows),
-}))
-const whereMock = vi.fn(() => ({
-  equals: equalsMock,
-}))
 const sendMessageMock = vi.fn()
-
-vi.mock("@/utils/db/dexie/db", () => ({
-  db: {
-    learningItems: {
-      where: whereMock,
-    },
-  },
-}))
 
 vi.mock("@/utils/message", () => ({
   sendMessage: sendMessageMock,
@@ -33,12 +8,11 @@ vi.mock("@/utils/message", () => ({
 
 describe("selective learning translation", () => {
   beforeEach(() => {
-    mockRows.length = 0
     vi.clearAllMocks()
     sendMessageMock.mockRejectedValue(new Error("bridge unavailable"))
   })
 
-  it("summarizes dictionary words when learning mode has no mastered match", async () => {
+  it("summarizes dictionary words when no daemon projection is available", async () => {
     const { buildLearningTranslationSummary } = await import("../selective-translation")
 
     const summary = await buildLearningTranslationSummary("This workflow can improve your ability.", 4)
@@ -48,30 +22,69 @@ describe("selective learning translation", () => {
     expect(summary).toContain("ability: 能力；才能")
   })
 
-  it("skips mastered words and uses learning explanations for learning words", async () => {
-    mockRows.push(
-      { id: "1", kind: "word", normalizedText: "workflow", status: "mastered" },
-      {
-        id: "2",
-        kind: "word",
-        normalizedText: "constraint",
-        status: "learning",
-        explanation: { meaningZh: "约束；限制条件" },
-      },
-    )
+  it("skips mature and archived daemon projection entries", async () => {
+    sendMessageMock.mockResolvedValue({
+      status: "ok",
+      projectionVersion: "projection-1",
+      entries: [
+        {
+          normalizedText: "workflow",
+          kind: "word",
+          status: "mature",
+          confidence: 0.98,
+          definition: "daemon workflow",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+        {
+          normalizedText: "ability",
+          kind: "word",
+          status: "archived",
+          confidence: 1,
+          definition: "daemon ability",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+        {
+          normalizedText: "constraint",
+          kind: "word",
+          status: "review",
+          confidence: 0.62,
+          definition: "daemon constraint",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    })
     const { buildLearningTranslationSummary } = await import("../selective-translation")
 
-    const summary = await buildLearningTranslationSummary("The workflow has a constraint.", 6)
+    const summary = await buildLearningTranslationSummary("The workflow ability has a constraint.", 6)
 
     expect(summary).not.toContain("workflow")
-    expect(summary).toContain("constraint: 约束；限制条件")
+    expect(summary).not.toContain("ability")
+    expect(summary).toContain("constraint: daemon constraint")
   })
 
-  it("returns empty text when every known term is mastered", async () => {
-    mockRows.push(
-      { id: "1", kind: "word", normalizedText: "workflow", status: "mastered" },
-      { id: "2", kind: "word", normalizedText: "ability", status: "mastered" },
-    )
+  it("returns empty text when every known term is mature or archived in daemon projection", async () => {
+    sendMessageMock.mockResolvedValue({
+      status: "ok",
+      projectionVersion: "projection-1",
+      entries: [
+        {
+          normalizedText: "workflow",
+          kind: "word",
+          status: "mature",
+          confidence: 0.98,
+          definition: "daemon workflow",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+        {
+          normalizedText: "ability",
+          kind: "word",
+          status: "archived",
+          confidence: 1,
+          definition: "daemon ability",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    })
     const { buildLearningTranslationSummary } = await import("../selective-translation")
 
     const summary = await buildLearningTranslationSummary("workflow ability", 6)
@@ -145,8 +158,7 @@ describe("selective learning translation", () => {
     expect(summary).toContain("constraint: cached constraint")
   })
 
-  it("lets daemon projection override stale local mastered state", async () => {
-    mockRows.push({ id: "1", kind: "word", normalizedText: "workflow", status: "mastered" })
+  it("uses daemon review entries without consulting the local learning database", async () => {
     sendMessageMock.mockResolvedValue({
       status: "ok",
       projectionVersion: "projection-1",

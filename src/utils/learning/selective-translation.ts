@@ -1,9 +1,7 @@
-import type { LearningItem } from "@/types/learning"
 import type { MasteryProjectionEntry } from "@/utils/learning-contracts"
-import { db } from "@/utils/db/dexie/db"
 import { MAX_MASTERY_PROJECTION_TERMS } from "@/utils/learning-contracts"
 import { sendMessage } from "@/utils/message"
-import { normalizeLearningText } from "./items"
+import { normalizeLearningText } from "./normalize"
 import { VOCAB_LIST } from "./vocab-list"
 
 export interface LearningTranslationTerm {
@@ -49,12 +47,6 @@ function getCandidateForms(word: string) {
   }
 
   return [...forms]
-}
-
-function findLearningItemForWord(itemsByText: Map<string, LearningItem>, word: string) {
-  return getCandidateForms(word)
-    .map(form => itemsByText.get(form))
-    .find(Boolean)
 }
 
 function findDefinitionForWord(word: string) {
@@ -103,14 +95,7 @@ export async function buildLearningTranslationSummary(text: string, maxTerms: nu
   }
 
   const uniqueWords = [...new Set(tokens)]
-  const [projectionEntriesByText, items] = await Promise.all([
-    getProjectionEntriesByWord(uniqueWords),
-    db.learningItems
-      .where("kind")
-      .equals("word")
-      .toArray(),
-  ])
-  const itemsByText = new Map(items.map(item => [item.normalizedText, item]))
+  const projectionEntriesByText = await getProjectionEntriesByWord(uniqueWords)
 
   const terms: LearningTranslationTerm[] = []
   for (const word of uniqueWords) {
@@ -119,12 +104,7 @@ export async function buildLearningTranslationSummary(text: string, maxTerms: nu
       continue
     }
 
-    const item = findLearningItemForWord(itemsByText, word)
-    if (!projectionEntry && item?.status === "mastered") {
-      continue
-    }
-
-    const definitionZh = projectionEntry?.definition ?? item?.explanation?.meaningZh ?? findDefinitionForWord(word)
+    const definitionZh = projectionEntry?.definition ?? findDefinitionForWord(word)
     if (!definitionZh) {
       continue
     }
@@ -134,7 +114,7 @@ export async function buildLearningTranslationSummary(text: string, maxTerms: nu
       definitionZh,
       status: projectionEntry && projectionEntry.status !== "unknown"
         ? "learning"
-        : item?.status === "learning" ? "learning" : "dictionary",
+        : "dictionary",
     })
 
     if (terms.length >= maxTerms) {

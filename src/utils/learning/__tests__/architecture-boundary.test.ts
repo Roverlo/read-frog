@@ -59,6 +59,13 @@ describe("learning workspace architecture boundary", () => {
     expect(source).toContain("syncLearningCaptureSelection")
   })
 
+  it("keeps selective translation driven by daemon projection instead of local learning tables", async () => {
+    const source = await readRepoFile("src/utils/learning/selective-translation.ts")
+
+    expectNoLocalLearningWrites(source)
+    expect(source).toContain("getLearningProjectionTerms")
+  })
+
   it("keeps production extension entrypoints from importing local learning item writes", async () => {
     const files = (await listFiles("src/entrypoints"))
       .filter(path => /\.(ts|tsx)$/.test(path))
