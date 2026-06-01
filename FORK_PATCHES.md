@@ -122,6 +122,7 @@ Then:
 pnpm exec tsc --noEmit
 $env:SKIP_FREE_API='true'; pnpm test
 $env:WXT_SKIP_ENV_VALIDATION='true'; pnpm build
+pnpm check:upstream-sync
 git diff --check
 ```
 
@@ -130,4 +131,6 @@ Before merging the sync branch back:
 - Confirm daemon assets remain under `apps/learning-daemon`.
 - Confirm `.output/chrome-mv3/dicts/qwerty` is absent after build.
 - Confirm `src/entrypoints/options/pages/learning/index.tsx` remains a bridge page, not a rich workspace.
-- Confirm selective translation tests still cover daemon projection and local fallback.
+- Confirm selective translation tests still cover daemon projection/cache behavior and do not read local learning tables.
+
+The `pnpm check:upstream-sync` guard turns the main fork-specific boundaries into a repeatable local check. It is intentionally conservative and should run after every upstream merge rehearsal, after build output exists.
