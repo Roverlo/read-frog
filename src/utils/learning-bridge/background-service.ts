@@ -276,6 +276,7 @@ export async function syncLearningProjectionCache(
       status: "disabled",
       projectionVersion: cache.projectionVersion,
       entryCount: cache.entries.length,
+      changed: false,
     }
   }
 
@@ -287,11 +288,14 @@ export async function syncLearningProjectionCache(
         status: "incompatible",
         projectionVersion: cache.projectionVersion,
         entryCount: cache.entries.length,
+        changed: false,
         error: `Expected contract ${LEARNING_CONTRACT_VERSION}, got ${health.contractVersion}`,
       }
     }
 
+    const previousCache = await store.getProjectionCache()
     const projection = await client.getProjection(config)
+    const changed = projection.projectionVersion !== previousCache.projectionVersion
     await store.replaceProjectionCache({
       projectionVersion: projection.projectionVersion,
       eventId: projection.eventId,
@@ -302,6 +306,7 @@ export async function syncLearningProjectionCache(
       status: "synced",
       projectionVersion: projection.projectionVersion,
       entryCount: projection.entries.length,
+      changed,
     }
   }
   catch (error) {
@@ -310,6 +315,7 @@ export async function syncLearningProjectionCache(
       status: "offline",
       projectionVersion: cache.projectionVersion,
       entryCount: cache.entries.length,
+      changed: false,
       error: getErrorMessage(error),
     }
   }

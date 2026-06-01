@@ -6,10 +6,40 @@ import {
   syncLearningCaptureSelection,
   syncLearningProjectionCache,
 } from "@/utils/learning-bridge"
-import { onMessage } from "@/utils/message"
+import { logger } from "@/utils/logger"
+import { onMessage, sendMessage } from "@/utils/message"
+import { getPageTranslationEnabled } from "./page-translation-state"
 
 export const LEARNING_PROJECTION_SYNC_ALARM = "learning-projection-sync"
 export const LEARNING_PROJECTION_SYNC_INTERVAL_MINUTES = 5
+
+export async function notifyLearningProjectionChangedTabs(
+  tabsApi: Pick<typeof browser.tabs, "query"> = browser.tabs,
+) {
+  const tabs = await tabsApi.query({})
+  await Promise.all(
+    tabs.map(async (tab) => {
+      if (typeof tab.id !== "number")
+        return
+
+      if (!await getPageTranslationEnabled(tab.id))
+        return
+
+      await sendMessage("refreshLearningPageTranslation", undefined, tab.id)
+        .catch(error => logger.warn("Failed to refresh learning page translation", error))
+    }),
+  )
+}
+
+async function syncLearningProjectionCacheAndNotifyIfChanged(
+  tabsApi: Pick<typeof browser.tabs, "query"> = browser.tabs,
+) {
+  const result = await syncLearningProjectionCache()
+  if (result.status === "synced" && result.changed) {
+    await notifyLearningProjectionChangedTabs(tabsApi)
+  }
+  return result
+}
 
 export function setupLearningBridgeMessageHandlers() {
   onMessage("getLearningBridgeStatus", async () => {
@@ -29,12 +59,13 @@ export function setupLearningBridgeMessageHandlers() {
   })
 
   onMessage("syncLearningProjectionCache", async () => {
-    return await syncLearningProjectionCache()
+    return await syncLearningProjectionCacheAndNotifyIfChanged()
   })
 }
 
 export async function setupLearningProjectionSyncAlarm(
   alarms: typeof browser.alarms = browser.alarms,
+  tabsApi: Pick<typeof browser.tabs, "query"> = browser.tabs,
 ) {
   const existingAlarm = await alarms.get(LEARNING_PROJECTION_SYNC_ALARM)
   if (!existingAlarm) {
@@ -46,7 +77,7 @@ export async function setupLearningProjectionSyncAlarm(
 
   alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === LEARNING_PROJECTION_SYNC_ALARM) {
-      void syncLearningProjectionCache()
+      void syncLearningProjectionCacheAndNotifyIfChanged(tabsApi)
     }
   })
 }

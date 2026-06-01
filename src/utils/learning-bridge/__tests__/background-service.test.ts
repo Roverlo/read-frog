@@ -286,6 +286,7 @@ describe("learning bridge background service", () => {
       status: "synced",
       projectionVersion: "projection-3",
       entryCount: 2,
+      changed: true,
     })
     expect(getProjectionCache()).toMatchObject({
       projectionVersion: "projection-3",
@@ -295,6 +296,42 @@ describe("learning bridge background service", () => {
         { normalizedText: "workflow" },
         { normalizedText: "constraint" },
       ],
+    })
+  })
+
+  it("marks a full projection cache sync unchanged when the projection version is stable", async () => {
+    const { syncLearningProjectionCache } = await import("../background-service")
+    const { store } = createStore([], {
+      projectionVersion: "projection-3",
+      eventId: "event-previous",
+      syncedAt: "2026-06-01T00:02:00.000Z",
+      entries: [
+        createProjectionEntry({ normalizedText: "workflow" }),
+      ],
+    })
+    const client = {
+      getHealth: vi.fn(async () => createHealth()),
+      captureSelection: vi.fn(),
+      getProjection: vi.fn(async () => ({
+        ok: true as const,
+        projectionVersion: "projection-3",
+        eventId: "event-3",
+        entries: [
+          createProjectionEntry({ normalizedText: "workflow" }),
+        ],
+      })),
+      getProjectionTerms: vi.fn(),
+    }
+
+    await expect(syncLearningProjectionCache({
+      store,
+      client,
+      now: () => "2026-06-01T00:03:00.000Z",
+    })).resolves.toEqual({
+      status: "synced",
+      projectionVersion: "projection-3",
+      entryCount: 1,
+      changed: false,
     })
   })
 })

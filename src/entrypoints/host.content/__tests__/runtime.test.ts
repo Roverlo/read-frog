@@ -226,4 +226,51 @@ describe("bootstrapHostContent URL changes", () => {
 
     invalidate()
   })
+
+  it("restarts active page translation when the learning projection changes", async () => {
+    mockSendMessage.mockImplementation((name: string) => {
+      if (name === "getEnablePageTranslationFromContentScript")
+        return Promise.resolve(true)
+
+      return Promise.resolve(undefined)
+    })
+
+    const { ctx, invalidate } = createContentScriptContext()
+    await bootstrapHostContent(ctx, null)
+    await flushAsyncWork()
+
+    const manager = managerInstances[0]
+    manager.restart.mockClear()
+
+    const refreshHandler = messageHandlers.get("refreshLearningPageTranslation")
+    if (!refreshHandler) {
+      throw new Error("Expected refreshLearningPageTranslation handler to be registered")
+    }
+
+    refreshHandler()
+    await flushAsyncWork()
+
+    expect(manager.restart).toHaveBeenCalledOnce()
+
+    invalidate()
+  })
+
+  it("ignores learning projection refreshes while page translation is inactive", async () => {
+    const { ctx, invalidate } = createContentScriptContext()
+    await bootstrapHostContent(ctx, null)
+    await flushAsyncWork()
+
+    const manager = managerInstances[0]
+    const refreshHandler = messageHandlers.get("refreshLearningPageTranslation")
+    if (!refreshHandler) {
+      throw new Error("Expected refreshLearningPageTranslation handler to be registered")
+    }
+
+    refreshHandler()
+    await flushAsyncWork()
+
+    expect(manager.restart).not.toHaveBeenCalled()
+
+    invalidate()
+  })
 })

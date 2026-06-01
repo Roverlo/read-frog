@@ -51,6 +51,7 @@ export interface LearningBridgeProjectionSyncResult {
   status: "synced" | "offline" | "disabled" | "incompatible"
   projectionVersion?: string
   entryCount: number
+  changed: boolean
   error?: string
 }
 
