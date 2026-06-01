@@ -126,6 +126,11 @@ describe("learning daemon server", () => {
     const js = await jsResponse.text()
     expect(js).toContain("/api/v1/workspace/state")
     expect(js).toContain("/api/v1/qwerty/dictionaries/")
+    expect(js).toContain("async function postJson(path, body)")
+    expect(js).toContain("if (!response.ok)")
+    expect(js).toContain("await postJson(\"/api/v1/qwerty/records/word\"")
+    expect(js).toContain("await postJson(\"/api/v1/qwerty/records/chapter\"")
+    expect(js).toContain("state.session.recordedChapterKeys = state.session.recordedChapterKeys.filter")
 
     expect(missingResponse.status).toBe(404)
   })

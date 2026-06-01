@@ -153,6 +153,23 @@
     function resetChapterSession() {
       state.session.chapterStartedAt = Date.now();
       state.session.chapterResults = [];
+      const chapterKey = currentChapterKey();
+      if (chapterKey) {
+        state.session.recordedChapterKeys = state.session.recordedChapterKeys.filter((key) => key !== chapterKey);
+      }
+    }
+
+    async function postJson(path, body) {
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || "Request failed: " + response.status);
+      }
+      return response.json();
     }
 
     function renderDeckControls() {
@@ -447,22 +464,18 @@
 
       $("submit-button").disabled = true;
       try {
-        await fetch("/api/v1/qwerty/records/word", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            word,
-            input,
-            correct,
-            accuracy,
-            durationMs,
-            definition: entry.entry.definition,
-            dictId: entry.source === "dictionary" ? state.dictionaryId : undefined,
-            chapterIndex: entry.source === "dictionary" ? state.chapterIndex : undefined,
-            wordIndex: entry.source === "dictionary" ? entry.word.index : undefined,
-            mistakes,
-            createdAt: new Date().toISOString(),
-          }),
+        await postJson("/api/v1/qwerty/records/word", {
+          word,
+          input,
+          correct,
+          accuracy,
+          durationMs,
+          definition: entry.entry.definition,
+          dictId: entry.source === "dictionary" ? state.dictionaryId : undefined,
+          chapterIndex: entry.source === "dictionary" ? state.chapterIndex : undefined,
+          wordIndex: entry.source === "dictionary" ? entry.word.index : undefined,
+          mistakes,
+          createdAt: new Date().toISOString(),
         });
         rememberChapterResult(entry, correct);
         state.session.attempts += 1;
@@ -524,21 +537,17 @@
       const correctCount = correctWordIndexes.length;
       const wrongCount = Math.max(0, state.dictionaryWords.length - correctCount);
       const durationMs = Math.max(1, Date.now() - state.session.chapterStartedAt);
-      await fetch("/api/v1/qwerty/records/chapter", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          dictId: state.dictionary.id,
-          dictName: state.dictionary.name,
-          chapterIndex: state.chapterIndex,
-          durationMs,
-          wordCount: state.dictionaryWords.length,
-          correctCount,
-          wrongCount,
-          accuracy: state.dictionaryWords.length ? correctCount / state.dictionaryWords.length : 0,
-          correctWordIndexes,
-          createdAt: new Date().toISOString(),
-        }),
+      await postJson("/api/v1/qwerty/records/chapter", {
+        dictId: state.dictionary.id,
+        dictName: state.dictionary.name,
+        chapterIndex: state.chapterIndex,
+        durationMs,
+        wordCount: state.dictionaryWords.length,
+        correctCount,
+        wrongCount,
+        accuracy: state.dictionaryWords.length ? correctCount / state.dictionaryWords.length : 0,
+        correctWordIndexes,
+        createdAt: new Date().toISOString(),
       });
       state.session.recordedChapterKeys.push(chapterKey);
       setText("toast", "Chapter recorded");
