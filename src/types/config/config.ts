@@ -30,6 +30,10 @@ const selectionToolbarSpeakFeatureSchema = z.object({
   enabled: z.boolean(),
 })
 
+const selectionToolbarLearningFeatureSchema = z.object({
+  enabled: z.boolean(),
+})
+
 // Text selection toolbar schema
 const selectionToolbarSchema = z.object({
   enabled: z.boolean(),
@@ -40,6 +44,7 @@ const selectionToolbarSchema = z.object({
   features: z.object({
     translate: selectionToolbarFeatureSchema,
     speak: selectionToolbarSpeakFeatureSchema,
+    learning: selectionToolbarLearningFeatureSchema,
   }),
   customActions: selectionToolbarCustomActionsSchema,
 })

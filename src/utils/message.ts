@@ -19,6 +19,18 @@ import type {
   TTSPlaybackStartResponse,
   TTSPlaybackStopRequest,
 } from "@/types/tts-playback"
+import type {
+  LearningBridgeCaptureResult,
+  LearningBridgeFlushResult,
+  LearningBridgeLegacyMigrationResult,
+  LearningBridgeProjectionSyncResult,
+  LearningBridgeProjectionTermsResult,
+  LearningBridgeQwertyChapterRecordResult,
+  LearningBridgeQwertyWordRecordResult,
+  LearningBridgeStatus,
+  LearningBridgeWorkspaceStateResult,
+} from "@/utils/learning-bridge"
+import type { LearningCaptureSelectionInput, LearningQwertyChapterRecordRequest, LearningQwertyWordRecordRequest } from "@/utils/learning-contracts"
 import type { EdgeTTSVoice } from "@/utils/server/edge-tts/types"
 import { defineExtensionMessaging } from "@webext-core/messaging"
 
@@ -36,6 +48,7 @@ interface ProtocolMap {
   tryToSetEnablePageTranslationOnContentScript: (data: { enabled: boolean, analyticsContext?: FeatureUsageContext }) => void
   setAndNotifyPageTranslationStateChangedByManager: (data: { enabled: boolean, url?: string }) => void
   notifyTranslationStateChanged: (data: { enabled: boolean }) => void
+  refreshLearningPageTranslation: () => void
   ensureIframeHostContentInjected: (data: { tabId?: number }) => void
   injectCurrentIframesAfterTopFrameNodeTranslation: () => void
   reportDetectedPageLanguage: (data: { detectedCodeOrUnd: LangCodeISO6393 | "und", url: string }) => void
@@ -69,6 +82,16 @@ interface ProtocolMap {
   microsoftBatchTranslate: (data: { texts: string[], fromLang: string, toLang: string }) => Promise<string[]>
   // network proxy
   backgroundFetch: (data: ProxyRequest) => Promise<ProxyResponse>
+  // learning container bridge
+  getLearningBridgeStatus: () => Promise<LearningBridgeStatus>
+  syncLearningCaptureSelection: (data: LearningCaptureSelectionInput) => Promise<LearningBridgeCaptureResult>
+  syncLearningQwertyWordRecord: (data: LearningQwertyWordRecordRequest) => Promise<LearningBridgeQwertyWordRecordResult>
+  syncLearningQwertyChapterRecord: (data: LearningQwertyChapterRecordRequest) => Promise<LearningBridgeQwertyChapterRecordResult>
+  getLearningWorkspaceState: () => Promise<LearningBridgeWorkspaceStateResult>
+  migrateLegacyLearningDataToDaemon: () => Promise<LearningBridgeLegacyMigrationResult>
+  flushLearningBridgeQueue: () => Promise<LearningBridgeFlushResult>
+  getLearningProjectionTerms: (data: { terms: string[] }) => Promise<LearningBridgeProjectionTermsResult>
+  syncLearningProjectionCache: () => Promise<LearningBridgeProjectionSyncResult>
   // cache management
   clearAllTranslationRelatedCache: () => Promise<void>
   clearAiSegmentationCache: () => Promise<void>

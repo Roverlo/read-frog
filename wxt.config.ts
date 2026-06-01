@@ -11,6 +11,27 @@ const ALLOWED_BUNDLED_API_KEYS = new Set([
 const useLocalPackages = isLocalPackagesEnabled(process.env)
 const shouldSkipEnvValidation = process.env.WXT_SKIP_ENV_VALIDATION === "true"
 
+function isUnicodeNoncharacter(codePoint: number) {
+  return (codePoint >= 0xFDD0 && codePoint <= 0xFDEF)
+    || ((codePoint & 0xFFFE) === 0xFFFE && codePoint <= 0x10FFFF)
+}
+
+function escapeUnicodeNoncharacters(code: string) {
+  return Array.from(code, (character) => {
+    const codePoint = character.codePointAt(0)
+
+    if (codePoint == null || !isUnicodeNoncharacter(codePoint)) {
+      return character
+    }
+
+    const hex = codePoint.toString(16).toUpperCase()
+
+    return codePoint <= 0xFFFF
+      ? `\\u${hex.padStart(4, "0")}`
+      : `\\u{${hex}}`
+  }).join("")
+}
+
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   srcDir: "src",
@@ -113,6 +134,19 @@ export default defineConfig({
             },
           ]
         : []),
+      {
+        name: "escape-js-unicode-noncharacters",
+        generateBundle(_options, bundle) {
+          for (const item of Object.values(bundle)) {
+            if (item.type === "chunk") {
+              item.code = escapeUnicodeNoncharacters(item.code)
+            }
+            else if (item.type === "asset" && typeof item.source === "string" && item.fileName.endsWith(".js")) {
+              item.source = escapeUnicodeNoncharacters(item.source)
+            }
+          }
+        },
+      },
     ],
   }),
 })

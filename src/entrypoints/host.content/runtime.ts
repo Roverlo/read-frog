@@ -98,6 +98,12 @@ export async function bootstrapHostContent(ctx: ContentScriptContext, initialCon
       })
     : () => {}
 
+  const cleanupLearningPageTranslationRefreshListener = onMessage("refreshLearningPageTranslation", () => {
+    if (manager.isActive) {
+      void manager.restart()
+    }
+  })
+
   ctx.onInvalidated(() => {
     removeHostToast()
     cleanupUrlListener()
@@ -107,6 +113,7 @@ export async function bootstrapHostContent(ctx: ContentScriptContext, initialCon
     cleanupTranslationStateListener()
     cleanupFrameTranslationStateListener()
     cleanupDetectedLanguageRefreshListener()
+    cleanupLearningPageTranslationRefreshListener()
     window.removeEventListener("extension:URLChange", handleExtensionUrlChange)
     window.__READ_FROG_HOST_INJECTED__ = false
     clearEffectiveSiteControlUrl()

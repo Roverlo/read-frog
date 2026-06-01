@@ -76,9 +76,9 @@ options:
     please: Пожалуйста, установите API-ключ на странице
     page: настроек
   betaExperience:
-    title: Бета-функции
-    description: Включите экспериментальные функции и ранний доступ к новым возможностям. Эти функции могут быть нестабильными или неполными.
-    enabled: Включить бета-функции
+    title: Экспериментальные функции
+    description: Оставляет экспериментальные функции доступными в этом fork. Некоторые параметры всё ещё могут зависеть от внешних сервисов.
+    enabled: Включить экспериментальные функции
   apiProviders:
     title: API-провайдеры
     description: Настройте API-провайдеров для функций перевода и анализа слов. У нас более 20 встроенных провайдеров и поддержка любых OpenAI-совместимых API.
@@ -402,8 +402,6 @@ options:
             emptyTitle: Notebase пока нет
             emptyDescription: Создайте notebase на readfrog.app, затем вернитесь сюда и сопоставьте поля.
             openNotebaseAction: Открыть Notebase
-            betaLockedTitle: Этот аккаунт ещё не участвует в beta Notebase
-            betaLockedDescription: Вы можете сохранить текущую настройку action, но выбор Notebase и синхронизация результатов пока доступны только выбранным beta-аккаунтам.
             tableUnavailableTitle: Выбранная notebase больше недоступна
             tableUnavailableDescription: Обновите список или выберите другую notebase перед следующим сохранением.
             tableUnavailableOption: недоступно
@@ -634,7 +632,7 @@ options:
     volume:
       label: Громкость (%)
       hint: Допустимы целые значения от -100 до 100
-    betaDisabled: Включите бета-функции для настройки синтеза речи.
+    betaDisabled: Включите экспериментальные функции для настройки синтеза речи.
   statistics:
     title: Статистика
     batchRequest:
@@ -882,7 +880,6 @@ action:
   saveToNotebaseSuccess: Сохранено в Notebase
   saveToNotebaseFailed: Не удалось сохранить в Notebase
   saveToNotebaseLoginRequired: Войдите на readfrog.app, чтобы сохранить в Notebase
-  saveToNotebaseBetaRequired: Для этого аккаунта beta-доступ к Notebase пока не включён
   saveToNotebaseTableUnavailable: Выбранная Notebase больше недоступна
   saveToNotebaseConnectionInvalid: Это подключение Notebase устарело. Обновите его в Custom AI Actions и исправьте сопоставления.
   saveToNotebaseNoMappings: Добавьте хотя бы одно корректное сопоставление перед сохранением

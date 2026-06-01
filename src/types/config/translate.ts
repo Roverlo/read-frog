@@ -101,6 +101,13 @@ export const translateConfigSchema = z.object({
     minWordsPerNode: z.number().min(MIN_WORDS_PER_NODE),
     enableTargetLanguageSkip: z.boolean(),
     skipLanguages: z.array(langCodeISO6393Schema),
+    learningMode: z.object({
+      enabled: z.boolean(),
+      maxTermsPerParagraph: z.number().int().min(1).max(12),
+    }).default({
+      enabled: false,
+      maxTermsPerParagraph: 6,
+    }),
   }),
   enableAIContentAware: z.boolean(),
   customPromptsConfig: customPromptsConfigSchema,

@@ -11,6 +11,7 @@ import { DEFAULT_BACKGROUND_OPACITY, DEFAULT_DISPLAY_MODE, DEFAULT_FONT_FAMILY, 
 import { DEFAULT_AUTO_TRANSLATE_SHORTCUT_KEY, DEFAULT_BATCH_CONFIG, DEFAULT_MIN_CHARACTERS_PER_NODE, DEFAULT_MIN_WORDS_PER_NODE, DEFAULT_PRELOAD_MARGIN, DEFAULT_PRELOAD_THRESHOLD, DEFAULT_REQUEST_CAPACITY, DEFAULT_REQUEST_RATE } from "./translate"
 import { TRANSLATION_NODE_STYLE_ON_INSTALLED } from "./translation-node-style"
 import { DEFAULT_TTS_CONFIG } from "./tts"
+import { isForkBetaExperienceUnlocked } from "../fork-features"
 
 export const CONFIG_STORAGE_KEY = "config"
 export const LAST_SYNCED_CONFIG_STORAGE_KEY = "lastSyncedConfig"
@@ -18,7 +19,7 @@ export const GOOGLE_DRIVE_TOKEN_STORAGE_KEY = "__googleDriveToken"
 
 export const THEME_STORAGE_KEY = "theme"
 export const DEFAULT_DETECTED_CODE = "eng" as const
-export const CONFIG_SCHEMA_VERSION = 72
+export const CONFIG_SCHEMA_VERSION = 73
 
 export const DEFAULT_FLOATING_BUTTON_POSITION = 0.66
 export const DEFAULT_FLOATING_BUTTON_SIDE: FloatingButtonSide = "right"
@@ -70,6 +71,10 @@ export const DEFAULT_CONFIG: Config = {
       minWordsPerNode: DEFAULT_MIN_WORDS_PER_NODE,
       enableTargetLanguageSkip: true,
       skipLanguages: [],
+      learningMode: {
+        enabled: false,
+        maxTermsPerParagraph: 6,
+      },
     },
     enableAIContentAware: false,
     customPromptsConfig: DEFAULT_TRANSLATE_PROMPTS_CONFIG,
@@ -111,6 +116,9 @@ export const DEFAULT_CONFIG: Config = {
       speak: {
         enabled: true,
       },
+      learning: {
+        enabled: true,
+      },
     },
     customActions: defaultDictionaryAction ? [defaultDictionaryAction] : [],
   },
@@ -118,7 +126,7 @@ export const DEFAULT_CONFIG: Config = {
     width: DEFAULT_SIDE_CONTENT_WIDTH,
   },
   betaExperience: {
-    enabled: false,
+    enabled: isForkBetaExperienceUnlocked(),
   },
   contextMenu: {
     enabled: true,

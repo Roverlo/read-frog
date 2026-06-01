@@ -4,6 +4,7 @@ import { storage } from "#imports"
 import { configSchema } from "@/types/config/config"
 import { isAPIProviderConfig } from "@/types/config/provider"
 import { CONFIG_SCHEMA_VERSION, CONFIG_STORAGE_KEY, DEFAULT_CONFIG } from "../constants/config"
+import { isForkBetaExperienceUnlocked } from "../fork-features"
 import { logger } from "../logger"
 import { runMigration } from "./migration"
 
@@ -55,8 +56,10 @@ export async function initializeConfig() {
     const apiKeyResult = applyAPIKeysFromEnv(config)
     config = apiKeyResult.config
     didConfigChange = didConfigChange || apiKeyResult.changed
+  }
 
-    const betaResult = applyDevBetaExperience(config)
+  if (import.meta.env.DEV || isForkBetaExperienceUnlocked()) {
+    const betaResult = applyUnlockedBetaExperience(config)
     config = betaResult.config
     didConfigChange = didConfigChange || betaResult.changed
   }
@@ -111,7 +114,7 @@ function applyAPIKeysFromEnv(config: Config): { config: Config, changed: boolean
   }
 }
 
-function applyDevBetaExperience(config: Config): { config: Config, changed: boolean } {
+function applyUnlockedBetaExperience(config: Config): { config: Config, changed: boolean } {
   if (config.betaExperience.enabled) {
     return { config, changed: false }
   }

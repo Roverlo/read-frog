@@ -76,9 +76,9 @@ options:
     please: API Key를 설정해 주세요
     page: 페이지에서
   betaExperience:
-    title: Beta 체험
-    description: 실험적 기능과 새로운 기능에 대한 조기 액세스를 활성화합니다. 이러한 기능은 불안정하거나 불완전할 수 있습니다.
-    enabled: Beta 체험 활성화
+    title: 실험 기능
+    description: 이 fork의 실험 기능을 사용할 수 있게 유지합니다. 일부 옵션은 외부 서비스에 계속 의존할 수 있습니다.
+    enabled: 실험 기능 활성화
   apiProviders:
     title: API 제공업체
     description: 번역 및 어휘 분석 기능을 위한 API 제공업체를 구성합니다. 20개 이상의 내장 제공업체와 모든 OpenAI 호환 API를 지원합니다.
@@ -402,8 +402,6 @@ options:
             emptyTitle: 아직 Notebase가 없습니다
             emptyDescription: readfrog.app에서 notebase를 만든 뒤 여기로 돌아와 필드를 매핑하세요.
             openNotebaseAction: Notebase 열기
-            betaLockedTitle: 이 계정은 Notebase 베타에 포함되어 있지 않습니다
-            betaLockedDescription: 현재 action 설정은 유지할 수 있지만, Notebase 선택과 결과 동기화는 일부 베타 계정에만 제공됩니다.
             tableUnavailableTitle: 선택한 notebase를 더 이상 사용할 수 없습니다
             tableUnavailableDescription: 다시 저장하기 전에 새로고침하거나 다른 notebase를 선택하세요.
             tableUnavailableOption: 사용 불가
@@ -634,7 +632,7 @@ options:
     volume:
       label: 볼륨 (%)
       hint: -100에서 100 사이 정수 값을 입력할 수 있습니다
-    betaDisabled: 텍스트 음성 변환 설정을 사용자 지정하려면 Beta 체험을 활성화하세요.
+    betaDisabled: 텍스트 음성 변환 설정을 사용자 지정하려면 실험 기능을 활성화하세요.
   statistics:
     title: 통계
     batchRequest:
@@ -882,7 +880,6 @@ action:
   saveToNotebaseSuccess: Notebase에 저장했습니다
   saveToNotebaseFailed: Notebase에 저장하지 못했습니다
   saveToNotebaseLoginRequired: Notebase에 저장하려면 readfrog.app에 로그인하세요
-  saveToNotebaseBetaRequired: 이 계정은 아직 Notebase 베타 대상이 아닙니다
   saveToNotebaseTableUnavailable: 선택한 Notebase를 더 이상 사용할 수 없습니다
   saveToNotebaseConnectionInvalid: 현재 Notebase 연결이 오래되었습니다. Custom AI Actions에서 새로고침하고 매핑을 수정하세요.
   saveToNotebaseNoMappings: 저장하기 전에 유효한 매핑을 하나 이상 추가하세요

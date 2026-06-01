@@ -1,0 +1,26 @@
+services:
+  learning-daemon:
+    build:
+      context: ../..
+      dockerfile: apps/learning-daemon/Dockerfile
+    environment:
+      READFROG_LEARNING_HOST: 0.0.0.0
+      READFROG_LEARNING_PORT: 7457
+      READFROG_LEARNING_DATA_DIR: /data
+    ports:
+      - "127.0.0.1:7457:7457"
+    volumes:
+      - readfrog-learning-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:' + (process.env.READFROG_LEARNING_PORT || '7457') + '/api/v1/health').then((response) => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  readfrog-learning-data:

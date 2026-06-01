@@ -19,10 +19,12 @@ import {
 } from "@/components/ui/base-ui/sidebar"
 
 const OVERLAY_TOOLS_PATHS = ["/floating-button", "/selection-toolbar", "/context-menu"] as const
+const LEARNING_PATHS = ["/learning", "/learning/settings"] as const
 
 export function SettingsNav() {
   const { pathname } = useLocation()
   const isOverlayToolsActive = OVERLAY_TOOLS_PATHS.includes(pathname)
+  const isLearningActive = LEARNING_PATHS.includes(pathname)
   const isFirefox = import.meta.env.BROWSER === "firefox"
 
   return (
@@ -71,6 +73,33 @@ export function SettingsNav() {
               <span>{i18n.t("options.overlayTools.inputTranslation.title")}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
+
+          <Collapsible defaultOpen={isLearningActive} className="group/collapsible">
+            <SidebarMenuItem>
+              <CollapsibleTrigger render={<SidebarMenuButton isActive={isLearningActive} />}>
+                <Icon icon="tabler:school" />
+                <span>学习</span>
+                <Icon
+                  icon="tabler:chevron-right"
+                  className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90"
+                />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <SidebarMenuSub>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton render={<Link to="/learning" />} isActive={pathname === "/learning"}>
+                      <span>学习工作台</span>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton render={<Link to="/learning/settings" />} isActive={pathname === "/learning/settings"}>
+                      <span>学习设置</span>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                </SidebarMenuSub>
+              </CollapsibleContent>
+            </SidebarMenuItem>
+          </Collapsible>
 
           <Collapsible defaultOpen={isOverlayToolsActive} className="group/collapsible">
             <SidebarMenuItem>

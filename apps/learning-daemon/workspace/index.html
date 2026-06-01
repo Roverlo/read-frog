@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-CN" data-readfrog-learning-workspace>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Read Frog 英语学习工作台</title>
+  <link rel="stylesheet" href="/workspace/app.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">RF</div>
+        <div>
+          <h1>英语学习工作台</h1>
+          <div class="subtitle">本地容器里的阅读记忆与 qwerty 练习中枢</div>
+        </div>
+      </div>
+      <div class="status-strip">
+        <span class="pill"><span id="health-dot" class="dot"></span><span id="health-text">连接中</span></span>
+        <span class="pill code" id="version-pill">projection-0</span>
+        <button class="icon-button" id="refresh-button" type="button" title="刷新" aria-label="刷新">↻</button>
+      </div>
+    </header>
+
+    <nav class="mobile-tabs" role="tablist" aria-label="学习页面快捷切换">
+      <button type="button" role="tab" aria-selected="true" aria-controls="overview" data-target="overview">总览</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="practice" data-target="practice">打字</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="projection" data-target="projection">掌握度</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="inbox" data-target="inbox">阅读</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="errors" data-target="errors">错题</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="data" data-target="data">数据</button>
+    </nav>
+
+    <div class="workspace">
+      <aside class="rail" aria-label="工作台导航">
+        <div class="rail-section">
+          <div class="rail-label">功能区</div>
+          <nav class="nav" role="tablist" aria-label="学习页面">
+            <button type="button" role="tab" aria-selected="true" aria-controls="overview" data-target="overview" aria-current="page">总览</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="practice" data-target="practice">打字</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="projection" data-target="projection">掌握度</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="inbox" data-target="inbox">阅读</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="errors" data-target="errors">错题</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="data" data-target="data">数据</button>
+          </nav>
+        </div>
+
+        <div class="rail-section">
+          <div class="rail-label">容器</div>
+          <div class="meta-block">
+            <div><span>服务</span><strong id="daemon-service">未知</strong></div>
+            <div><span>协议</span><strong id="contract-version">未知</strong></div>
+            <div><span>存储</span><strong>本地 JSON</strong></div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <section class="workspace-page overview-panel is-active" id="overview" data-page="overview" role="tabpanel" aria-label="学习工作台总览">
+          <div class="overview-copy">
+            <div class="eyebrow">掌握度投影</div>
+            <h2>会的少翻，不会的多练。</h2>
+            <p>划词、qwerty 记录、导入数据和词库练习会先汇总到这里，再给扩展提供选择性翻译依据。</p>
+          </div>
+          <section class="metrics" aria-label="掌握度分布">
+            <div class="metric">
+              <div class="label">学习中</div>
+              <div class="value" id="metric-learning">0</div>
+            </div>
+            <div class="metric">
+              <div class="label">复习中</div>
+              <div class="value" id="metric-review">0</div>
+            </div>
+            <div class="metric">
+              <div class="label">已掌握</div>
+              <div class="value" id="metric-mature">0</div>
+            </div>
+            <div class="metric">
+              <div class="label">已归档</div>
+              <div class="value" id="metric-archived">0</div>
+            </div>
+          </section>
+          <section class="quick-stats" aria-label="学习活动">
+            <div><span>划词</span><strong id="metric-captures">0</strong></div>
+            <div><span>打字</span><strong id="metric-qwerty">0</strong></div>
+            <div><span>准确率</span><strong id="metric-accuracy">0%</strong></div>
+          </section>
+        </section>
+
+        <section class="workspace-page practice-page" id="practice" data-page="practice" role="tabpanel" aria-label="qwerty 打字练习">
+          <section class="surface practice" aria-label="qwerty 打字练习台">
+            <div class="stage">
+              <div class="stage-head">
+                <div>
+                  <div class="label">当前练习</div>
+                  <div id="practice-source" class="source-line">掌握度队列</div>
+                </div>
+                <div class="segmented" aria-label="练习模式">
+                  <button id="mode-projection-button" type="button" aria-pressed="true">复习</button>
+                  <button id="mode-deck-button" type="button" aria-pressed="false">词库</button>
+                </div>
+              </div>
+              <div id="stage-word" class="stage-word">暂无词条</div>
+              <div id="typing-ghost" class="typing-ghost" aria-live="polite"></div>
+              <input id="typing-input" class="stage-input" autocomplete="off" spellcheck="false" aria-label="输入当前单词">
+              <div id="definition" class="definition">从扩展划词保存，或加载 qwerty 词库开始。</div>
+              <div class="actions">
+                <button id="submit-button" class="primary" type="button">提交</button>
+                <button id="skip-button" class="secondary" type="button">下一个</button>
+                <span id="toast" class="toast" role="status"></span>
+              </div>
+            </div>
+            <div class="session" aria-label="本次练习">
+              <div class="session-title">本次练习</div>
+              <div class="session-row"><span>次数</span><strong id="session-attempts">0</strong></div>
+              <div class="session-row"><span>正确</span><strong id="session-correct">0</strong></div>
+              <div class="session-row"><span>准确率</span><strong id="session-accuracy">0%</strong></div>
+              <div class="session-row"><span>当前</span><strong id="session-active">-</strong></div>
+              <div class="progress-shell"><div id="chapter-progress" class="progress-bar"></div></div>
+              <div class="session-row"><span>章节</span><strong id="chapter-progress-text">0/0</strong></div>
+            </div>
+          </section>
+
+          <section class="surface deck-panel" aria-label="qwerty 词库控制">
+            <div class="deck-controls">
+              <label class="select-field">
+                <span class="label">词库</span>
+                <select id="dictionary-select" aria-label="选择 qwerty 词库"></select>
+              </label>
+              <div class="chapter-controls">
+                <button id="previous-chapter-button" class="secondary compact" type="button">上一章</button>
+                <div class="chapter-meta">
+                  <strong id="chapter-title">第 1 章</strong>
+                  <span id="chapter-range">0 词</span>
+                </div>
+                <button id="next-chapter-button" class="secondary compact" type="button">下一章</button>
+              </div>
+            </div>
+            <div id="chapter-word-strip" class="word-strip" aria-label="当前章节单词"></div>
+          </section>
+        </section>
+
+        <section class="workspace-page table-wrap" id="projection" data-page="projection" role="tabpanel" aria-label="掌握度词条">
+          <div class="table-head">
+            <div>
+              <div class="label">掌握度词条</div>
+              <strong id="projection-count">0 条</strong>
+            </div>
+            <button class="secondary compact" id="export-button" type="button">导出</button>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>词条</th>
+                <th>类型</th>
+                <th>状态</th>
+                <th>掌握度</th>
+                <th>释义</th>
+              </tr>
+            </thead>
+            <tbody id="projection-body">
+              <tr><td colspan="5">正在加载掌握度...</td></tr>
+            </tbody>
+          </table>
+        </section>
+        <section class="workspace-page context-section" id="inbox" data-page="inbox" role="tabpanel" aria-label="阅读收件箱">
+          <div class="panel-title">
+            <h2>阅读收件箱</h2>
+            <span class="label" id="inbox-count">0 条</span>
+          </div>
+          <div id="context-list" class="context-list">
+            <div class="empty">还没有载入学习数据。</div>
+          </div>
+        </section>
+        <section class="workspace-page context-section" id="errors" data-page="errors" role="tabpanel" aria-label="错题本">
+          <div class="panel-title">
+            <h2>错题本</h2>
+            <span class="label" id="error-count">0 个错误</span>
+          </div>
+          <div id="error-book-list" class="context-list">
+            <div class="empty">还没有 qwerty 错题。</div>
+          </div>
+          <div id="key-mistake-list" class="key-grid" aria-label="错误按键组合"></div>
+        </section>
+        <section class="workspace-page context-section" id="data" data-page="data" role="tabpanel" aria-label="数据导入导出">
+          <div class="panel-title">
+            <h2>数据导入导出</h2>
+            <span class="label">可迁移</span>
+          </div>
+          <div class="data-actions">
+            <button class="secondary" id="download-export-button" type="button">下载备份</button>
+            <label class="file-button">
+              <span>导入文件</span>
+              <input id="import-file-input" type="file" accept="application/json,.json">
+            </label>
+          </div>
+          <div id="data-status" class="data-status">待命</div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script type="module" src="/workspace/app.js"></script>
+</body>
+</html>

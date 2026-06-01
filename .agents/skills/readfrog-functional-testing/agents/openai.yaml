@@ -1,0 +1,4 @@
+interface:
+  display_name: "Read Frog Functional Testing"
+  short_description: "Strict functional verification workflow for read-frog changes"
+  default_prompt: "Use $readfrog-functional-testing to verify this read-frog feature change with build, tests, and real browser evidence."

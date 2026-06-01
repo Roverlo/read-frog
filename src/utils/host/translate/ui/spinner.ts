@@ -1,10 +1,4 @@
 import type { APICallError } from "ai"
-import * as React from "react"
-import textSmallCSS from "@/assets/styles/text-small.css?inline"
-import themeCSS from "@/assets/styles/theme.css?inline"
-import { TranslationError } from "@/components/translation/error"
-import { createReactShadowHost } from "@/utils/react-shadow-host/create-shadow-host"
-import { TRANSLATION_ERROR_CONTAINER_CLASS } from "../../../constants/dom-labels"
 import { getContainingShadowRoot, getOwnerDocument } from "../../dom/node"
 import { translateTextForPage } from "../translate-variants"
 import { ensurePresetStyles } from "./style-injector"
@@ -90,6 +84,22 @@ export async function getTranslatedTextAndRemoveSpinner(
     translatedText = await translateTextForPage(textContent)
   }
   catch (error) {
+    const [
+      React,
+      { default: textSmallCSS },
+      { default: themeCSS },
+      { TranslationError },
+      { createReactShadowHost },
+      { TRANSLATION_ERROR_CONTAINER_CLASS },
+    ] = await Promise.all([
+      import("react"),
+      import("@/assets/styles/text-small.css?inline"),
+      import("@/assets/styles/theme.css?inline"),
+      import("@/components/translation/error"),
+      import("@/utils/react-shadow-host/create-shadow-host"),
+      import("../../../constants/dom-labels"),
+    ])
+
     const errorComponent = React.createElement(TranslationError, {
       nodes,
       error: error as APICallError,
