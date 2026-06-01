@@ -3,6 +3,8 @@ import type {
   LearningCaptureSelectionRequest,
   LearningCaptureSelectionResponse,
   LearningDaemonHealthResponse,
+  LearningQwertyChapterRecordRequest,
+  LearningQwertyChapterRecordResponse,
   LearningQwertyDictionariesResponse,
   LearningQwertyDictionaryChapterResponse,
   LearningQwertyWordRecordRequest,
@@ -13,6 +15,7 @@ import type {
 import {
   learningCaptureSelectionResponseSchema,
   learningDaemonHealthResponseSchema,
+  learningQwertyChapterRecordResponseSchema,
   learningQwertyDictionariesResponseSchema,
   learningQwertyDictionaryChapterResponseSchema,
   learningQwertyWordRecordResponseSchema,
@@ -152,6 +155,17 @@ export async function postLearningQwertyWordRecord(
   options: LearningDaemonClientOptions,
 ): Promise<LearningQwertyWordRecordResponse> {
   return requestJson("/api/v1/qwerty/records/word", learningQwertyWordRecordResponseSchema, {
+    ...options,
+    method: "POST",
+    body: request,
+  })
+}
+
+export async function postLearningQwertyChapterRecord(
+  request: LearningQwertyChapterRecordRequest,
+  options: LearningDaemonClientOptions,
+): Promise<LearningQwertyChapterRecordResponse> {
+  return requestJson("/api/v1/qwerty/records/chapter", learningQwertyChapterRecordResponseSchema, {
     ...options,
     method: "POST",
     body: request,

@@ -104,6 +104,26 @@ export const learningQwertyWordRecordResponseSchema = z.object({
   entry: masteryProjectionEntrySchema,
 })
 
+export const learningQwertyChapterRecordRequestSchema = z.object({
+  id: z.string().trim().min(1).optional(),
+  dictId: z.string().trim().min(1),
+  dictName: z.string().trim().min(1).optional(),
+  chapterIndex: z.number().int().nonnegative(),
+  durationMs: z.number().int().nonnegative(),
+  wordCount: z.number().int().nonnegative(),
+  correctCount: z.number().int().nonnegative(),
+  wrongCount: z.number().int().nonnegative(),
+  accuracy: z.number().min(0).max(1),
+  correctWordIndexes: z.array(z.number().int().nonnegative()).default([]),
+  createdAt: z.string().datetime().optional(),
+})
+
+export const learningQwertyChapterRecordResponseSchema = z.object({
+  ok: z.literal(true),
+  recordId: z.string(),
+  projectionVersion: z.string(),
+})
+
 export const learningQwertyDictionaryResourceSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1),
@@ -162,9 +182,23 @@ export const learningWorkspaceQwertyRecordSummarySchema = z.object({
   createdAt: z.string().datetime(),
 })
 
+export const learningWorkspaceQwertyChapterRecordSummarySchema = z.object({
+  id: z.string().trim().min(1).optional(),
+  dictId: z.string().trim().min(1),
+  dictName: z.string().trim().min(1).optional(),
+  chapterIndex: z.number().int().nonnegative(),
+  durationMs: z.number().int().nonnegative(),
+  wordCount: z.number().int().nonnegative(),
+  correctCount: z.number().int().nonnegative(),
+  wrongCount: z.number().int().nonnegative(),
+  accuracy: z.number().min(0).max(1),
+  createdAt: z.string().datetime(),
+})
+
 export const learningWorkspaceStatsSchema = z.object({
   captureCount: z.number().int().nonnegative(),
   qwertyRecordCount: z.number().int().nonnegative(),
+  qwertyChapterRecordCount: z.number().int().nonnegative(),
   correctQwertyRecordCount: z.number().int().nonnegative(),
   projectionEntryCount: z.number().int().nonnegative(),
   unknownCount: z.number().int().nonnegative(),
@@ -182,6 +216,7 @@ export const learningWorkspaceStateResponseSchema = z.object({
   stats: learningWorkspaceStatsSchema,
   captures: z.array(learningWorkspaceCaptureSummarySchema),
   qwertyWordRecords: z.array(learningWorkspaceQwertyRecordSummarySchema),
+  qwertyChapterRecords: z.array(learningWorkspaceQwertyChapterRecordSummarySchema),
 })
 
 export const masteryProjectionTermsRequestSchema = z.object({
@@ -201,9 +236,12 @@ export type LearningQwertyDictionariesResponse = z.infer<typeof learningQwertyDi
 export type LearningQwertyDictionaryChapterResponse = z.infer<typeof learningQwertyDictionaryChapterResponseSchema>
 export type LearningQwertyDictionaryResource = z.infer<typeof learningQwertyDictionaryResourceSchema>
 export type LearningQwertyWord = z.infer<typeof learningQwertyWordSchema>
+export type LearningQwertyChapterRecordRequest = z.infer<typeof learningQwertyChapterRecordRequestSchema>
+export type LearningQwertyChapterRecordResponse = z.infer<typeof learningQwertyChapterRecordResponseSchema>
 export type LearningQwertyWordRecordRequest = z.infer<typeof learningQwertyWordRecordRequestSchema>
 export type LearningQwertyWordRecordResponse = z.infer<typeof learningQwertyWordRecordResponseSchema>
 export type LearningWorkspaceCaptureSummary = z.infer<typeof learningWorkspaceCaptureSummarySchema>
+export type LearningWorkspaceQwertyChapterRecordSummary = z.infer<typeof learningWorkspaceQwertyChapterRecordSummarySchema>
 export type LearningWorkspaceQwertyRecordSummary = z.infer<typeof learningWorkspaceQwertyRecordSummarySchema>
 export type LearningWorkspaceStateResponse = z.infer<typeof learningWorkspaceStateResponseSchema>
 export type LearningWorkspaceStats = z.infer<typeof learningWorkspaceStatsSchema>

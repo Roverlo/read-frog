@@ -1,5 +1,6 @@
 import type {
   LearningCaptureSelectionRequest,
+  LearningQwertyChapterRecordRequest,
   LearningQwertyWordRecordRequest,
   LearningWorkspaceStateResponse,
   LearningWorkspaceStats,
@@ -14,6 +15,7 @@ export interface LearningDaemonStoreState {
   eventId?: string
   captures: LearningCaptureSelectionRequest[]
   qwertyWordRecords: LearningQwertyWordRecordRequest[]
+  qwertyChapterRecords: LearningQwertyChapterRecordRequest[]
   entries: MasteryProjectionEntry[]
 }
 
@@ -28,11 +30,17 @@ export interface RecordQwertyWordResult {
   entry: MasteryProjectionEntry
 }
 
+export interface RecordQwertyChapterResult {
+  recordId: string
+  projectionVersion: string
+}
+
 export interface LearningDaemonStore {
   getState: () => Promise<LearningDaemonStoreState>
   getWorkspaceState: () => Promise<LearningWorkspaceStateResponse>
   captureSelection: (capture: LearningCaptureSelectionRequest) => Promise<CaptureSelectionResult>
   recordQwertyWord: (record: LearningQwertyWordRecordRequest) => Promise<RecordQwertyWordResult>
+  recordQwertyChapter: (record: LearningQwertyChapterRecordRequest) => Promise<RecordQwertyChapterResult>
 }
 
 export function normalizeLearningDaemonText(text: string) {
@@ -49,6 +57,7 @@ function createInitialState(): LearningDaemonStoreState {
     projectionVersion: "projection-0",
     captures: [],
     qwertyWordRecords: [],
+    qwertyChapterRecords: [],
     entries: [],
   }
 }
@@ -196,6 +205,7 @@ function createWorkspaceStats(state: LearningDaemonStoreState): LearningWorkspac
   return {
     captureCount: state.captures.length,
     qwertyRecordCount: state.qwertyWordRecords.length,
+    qwertyChapterRecordCount: state.qwertyChapterRecords.length,
     correctQwertyRecordCount: state.qwertyWordRecords.filter(record => record.correct).length,
     projectionEntryCount: state.entries.length,
     unknownCount: projectionCounts.unknown ?? 0,
@@ -244,6 +254,21 @@ function createWorkspaceStateResponse(
         chapterIndex: record.chapterIndex,
         wordIndex: record.wordIndex,
         mistakeCount: record.mistakes.length,
+        createdAt: record.createdAt ?? new Date().toISOString(),
+      })),
+    qwertyChapterRecords: state.qwertyChapterRecords
+      .slice(-30)
+      .reverse()
+      .map(record => ({
+        id: record.id,
+        dictId: record.dictId,
+        dictName: record.dictName,
+        chapterIndex: record.chapterIndex,
+        durationMs: record.durationMs,
+        wordCount: record.wordCount,
+        correctCount: record.correctCount,
+        wrongCount: record.wrongCount,
+        accuracy: record.accuracy,
         createdAt: record.createdAt ?? new Date().toISOString(),
       })),
   }
@@ -323,6 +348,30 @@ export function createFileLearningDaemonStore(dataDir: string): LearningDaemonSt
       })
 
       return { itemId, projectionVersion, entry }
+    },
+
+    async recordQwertyChapter(record) {
+      const state = await readState(filePath)
+      const sequence = state.sequence + 1
+      const projectionVersion = `projection-${sequence}`
+      const eventId = `event-${sequence}`
+      const createdAt = record.createdAt ?? new Date().toISOString()
+      const recordId = record.id ?? `${record.dictId}:chapter:${record.chapterIndex}:${sequence}`
+      const recordWithCreatedAt = {
+        ...record,
+        id: recordId,
+        createdAt,
+      }
+
+      await writeState(filePath, {
+        ...state,
+        sequence,
+        projectionVersion,
+        eventId,
+        qwertyChapterRecords: [...state.qwertyChapterRecords, recordWithCreatedAt],
+      })
+
+      return { recordId, projectionVersion }
     },
   }
 }

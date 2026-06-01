@@ -186,6 +186,7 @@ describe("learning daemon server", () => {
       stats: {
         captureCount: 1,
         qwertyRecordCount: 1,
+        qwertyChapterRecordCount: 0,
         correctQwertyRecordCount: 1,
         projectionEntryCount: 2,
         averageAccuracy: 1,
@@ -211,6 +212,55 @@ describe("learning daemon server", () => {
           chapterIndex: 0,
           wordIndex: 1,
           mistakeCount: 0,
+        },
+      ],
+    })
+  })
+
+  it("records qwerty chapter practice and exposes chapter summaries", async () => {
+    const chapterResponse = await fetch(`${baseUrl}/api/v1/qwerty/records/chapter`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: new Blob([JSON.stringify({
+        id: "chapter-state",
+        dictId: "cet4",
+        dictName: "CET-4",
+        chapterIndex: 0,
+        durationMs: 30_000,
+        wordCount: 20,
+        correctCount: 18,
+        wrongCount: 2,
+        accuracy: 0.9,
+        correctWordIndexes: [0, 1, 2],
+        createdAt: "2026-06-01T00:02:00.000Z",
+      })]),
+    })
+
+    await expect(chapterResponse.json()).resolves.toEqual({
+      ok: true,
+      recordId: "chapter-state",
+      projectionVersion: "projection-1",
+    })
+
+    const workspaceResponse = await fetch(`${baseUrl}/api/v1/workspace/state`)
+    await expect(workspaceResponse.json()).resolves.toMatchObject({
+      ok: true,
+      projectionVersion: "projection-1",
+      stats: {
+        qwertyChapterRecordCount: 1,
+      },
+      qwertyChapterRecords: [
+        {
+          id: "chapter-state",
+          dictId: "cet4",
+          dictName: "CET-4",
+          chapterIndex: 0,
+          durationMs: 30_000,
+          wordCount: 20,
+          correctCount: 18,
+          wrongCount: 2,
+          accuracy: 0.9,
+          createdAt: "2026-06-01T00:02:00.000Z",
         },
       ],
     })

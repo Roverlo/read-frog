@@ -1,4 +1,4 @@
-﻿    const state = {
+    const state = {
       health: null,
       projection: { projectionVersion: "projection-0", entries: [] },
       workspaceState: null,
@@ -6,9 +6,16 @@
       dictionaryWords: [],
       dictionaryId: null,
       dictionary: null,
+      practiceMode: "projection",
       chapterIndex: 0,
       activeIndex: 0,
-      session: { attempts: 0, correct: 0 },
+      session: {
+        attempts: 0,
+        correct: 0,
+        chapterStartedAt: Date.now(),
+        chapterResults: [],
+        recordedChapterKeys: [],
+      },
       startedAt: Date.now(),
     };
 
@@ -47,11 +54,18 @@
     }
 
     function getPracticeEntries() {
+      if (state.practiceMode === "deck") {
+        return getDictionaryPracticeEntries();
+      }
       const projectedEntries = sortEntries(state.projection.entries)
         .filter((entry) => entry.kind === "word" && entry.status !== "archived" && entry.status !== "mature");
       if (projectedEntries.length) {
         return projectedEntries.map((entry) => ({ source: "projection", entry }));
       }
+      return getDictionaryPracticeEntries();
+    }
+
+    function getDictionaryPracticeEntries() {
       return state.dictionaryWords.map((word) => ({
         source: "dictionary",
         word,
@@ -129,6 +143,15 @@
       renderChapterWords(entry);
     }
 
+    function currentChapterKey() {
+      return state.dictionary ? `${state.dictionary.id}:${state.chapterIndex}` : "";
+    }
+
+    function resetChapterSession() {
+      state.session.chapterStartedAt = Date.now();
+      state.session.chapterResults = [];
+    }
+
     function renderDeckControls() {
       const select = $("dictionary-select");
       const currentValue = select.value;
@@ -168,6 +191,7 @@
         }
         token.textContent = `${index + 1}. ${word.name}`;
         token.addEventListener("click", () => {
+          state.practiceMode = "deck";
           state.activeIndex = index;
           $("typing-input").value = "";
           state.startedAt = Date.now();
@@ -209,6 +233,7 @@
             candidate.entry.normalizedText === entry.normalizedText && candidate.entry.kind === entry.kind
           );
           if (index >= 0) {
+            state.practiceMode = "projection";
             state.activeIndex = index;
             $("typing-input").value = "";
             renderPractice();
@@ -223,6 +248,7 @@
       const list = $("context-list");
       const captures = state.workspaceState?.captures ?? [];
       const qwertyRecords = state.workspaceState?.qwertyWordRecords ?? [];
+      const qwertyChapterRecords = state.workspaceState?.qwertyChapterRecords ?? [];
       const items = [
         ...captures.slice(0, 6).map((capture) => ({
           title: capture.text,
@@ -234,6 +260,13 @@
         ...qwertyRecords.slice(0, 6).map((record) => ({
           title: record.word,
           detail: "qwerty / " + (record.correct ? "correct" : "review")
+            + " / " + Math.round(record.accuracy * 100) + "%"
+            + " / " + Math.round(record.durationMs / 1000) + "s",
+        })),
+        ...qwertyChapterRecords.slice(0, 4).map((record) => ({
+          title: `${record.dictName ?? record.dictId} · Chapter ${record.chapterIndex + 1}`,
+          detail: "chapter"
+            + " / " + record.correctCount + "/" + record.wordCount
             + " / " + Math.round(record.accuracy * 100) + "%"
             + " / " + Math.round(record.durationMs / 1000) + "s",
         })),
@@ -303,7 +336,9 @@
       state.chapterIndex = chapter.chapterIndex;
       state.dictionaryWords = chapter.words || [];
       state.activeIndex = 0;
+      state.practiceMode = "deck";
       state.startedAt = Date.now();
+      resetChapterSession();
     }
 
     function mistakesFor(word, input) {
@@ -352,6 +387,7 @@
             createdAt: new Date().toISOString(),
           }),
         });
+        rememberChapterResult(entry, correct);
         state.session.attempts += 1;
         if (correct) {
           state.session.correct += 1;
@@ -361,6 +397,7 @@
         state.startedAt = Date.now();
         setText("toast", correct ? "Recorded" : "Recorded for review");
         $("toast").classList.remove("error");
+        await maybeRecordChapterCompletion();
         await refresh();
       }
       catch (error) {
@@ -371,6 +408,64 @@
         $("submit-button").disabled = false;
         $("typing-input").focus();
       }
+    }
+
+    function rememberChapterResult(entry, correct) {
+      if (entry.source !== "dictionary" || !entry.word || !state.dictionary) {
+        return;
+      }
+      const existingIndex = state.session.chapterResults.findIndex((result) => result.wordIndex === entry.word.index);
+      const result = {
+        wordIndex: entry.word.index,
+        correct,
+      };
+      if (existingIndex >= 0) {
+        state.session.chapterResults[existingIndex] = result;
+      }
+      else {
+        state.session.chapterResults.push(result);
+      }
+    }
+
+    async function maybeRecordChapterCompletion() {
+      if (!state.dictionary || !state.dictionaryWords.length) {
+        return;
+      }
+      const chapterKey = currentChapterKey();
+      if (!chapterKey || state.session.recordedChapterKeys.includes(chapterKey)) {
+        return;
+      }
+      const wordIndexes = new Set(state.dictionaryWords.map((word) => word.index));
+      const chapterResults = state.session.chapterResults.filter((result) => wordIndexes.has(result.wordIndex));
+      if (chapterResults.length < state.dictionaryWords.length) {
+        return;
+      }
+
+      const correctWordIndexes = chapterResults
+        .filter((result) => result.correct)
+        .map((result) => result.wordIndex)
+      const correctCount = correctWordIndexes.length;
+      const wrongCount = Math.max(0, state.dictionaryWords.length - correctCount);
+      const durationMs = Math.max(1, Date.now() - state.session.chapterStartedAt);
+      await fetch("/api/v1/qwerty/records/chapter", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          dictId: state.dictionary.id,
+          dictName: state.dictionary.name,
+          chapterIndex: state.chapterIndex,
+          durationMs,
+          wordCount: state.dictionaryWords.length,
+          correctCount,
+          wrongCount,
+          accuracy: state.dictionaryWords.length ? correctCount / state.dictionaryWords.length : 0,
+          correctWordIndexes,
+          createdAt: new Date().toISOString(),
+        }),
+      });
+      state.session.recordedChapterKeys.push(chapterKey);
+      setText("toast", "Chapter recorded");
+      await refresh();
     }
 
     $("refresh-button").addEventListener("click", refresh);

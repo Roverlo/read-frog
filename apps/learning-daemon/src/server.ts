@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type {
   LearningCaptureSelectionRequest,
   LearningDaemonHealthResponse,
+  LearningQwertyChapterRecordRequest,
   LearningQwertyWordRecordRequest,
   MasteryProjectionResponse,
 } from "../../../src/utils/learning-contracts/schemas.ts"
@@ -14,6 +15,8 @@ import {
   learningCaptureSelectionRequestSchema,
   learningCaptureSelectionResponseSchema,
   learningDaemonHealthResponseSchema,
+  learningQwertyChapterRecordRequestSchema,
+  learningQwertyChapterRecordResponseSchema,
   learningQwertyDictionariesResponseSchema,
   learningQwertyDictionaryChapterResponseSchema,
   learningQwertyWordRecordRequestSchema,
@@ -209,6 +212,23 @@ async function handleQwertyWordRecord(
   }))
 }
 
+async function handleQwertyChapterRecord(
+  request: IncomingMessage,
+  response: ServerResponse,
+  store: LearningDaemonStore,
+  maxBodyBytes: number,
+) {
+  const record: LearningQwertyChapterRecordRequest = learningQwertyChapterRecordRequestSchema.parse(
+    await readJsonBody(request, maxBodyBytes),
+  )
+  const result = await store.recordQwertyChapter(record)
+  sendJson(response, 200, learningQwertyChapterRecordResponseSchema.parse({
+    ok: true,
+    recordId: result.recordId,
+    projectionVersion: result.projectionVersion,
+  }))
+}
+
 function handleQwertyDictionaries(response: ServerResponse) {
   sendJson(response, 200, learningQwertyDictionariesResponseSchema.parse({
     ok: true,
@@ -321,6 +341,11 @@ export function createLearningDaemonServer(options: LearningDaemonServerOptions)
 
       if (request.method === "POST" && path === "/api/v1/qwerty/records/word") {
         await handleQwertyWordRecord(request, response, options.store, maxBodyBytes)
+        return
+      }
+
+      if (request.method === "POST" && path === "/api/v1/qwerty/records/chapter") {
+        await handleQwertyChapterRecord(request, response, options.store, maxBodyBytes)
         return
       }
 
