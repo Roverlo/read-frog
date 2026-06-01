@@ -41,17 +41,34 @@ async function syncLearningProjectionCacheAndNotifyIfChanged(
   return result
 }
 
-export function setupLearningBridgeMessageHandlers() {
+async function refreshLearningProjectionCacheAfterWrite(
+  tabsApi: Pick<typeof browser.tabs, "query"> = browser.tabs,
+) {
+  await syncLearningProjectionCacheAndNotifyIfChanged(tabsApi)
+    .catch(error => logger.warn("Failed to refresh learning projection after write", error))
+}
+
+export function setupLearningBridgeMessageHandlers(
+  tabsApi: Pick<typeof browser.tabs, "query"> = browser.tabs,
+) {
   onMessage("getLearningBridgeStatus", async () => {
     return await getLearningBridgeStatus()
   })
 
   onMessage("syncLearningCaptureSelection", async (message) => {
-    return await syncLearningCaptureSelection(message.data)
+    const result = await syncLearningCaptureSelection(message.data)
+    if (result.status === "synced") {
+      await refreshLearningProjectionCacheAfterWrite(tabsApi)
+    }
+    return result
   })
 
   onMessage("flushLearningBridgeQueue", async () => {
-    return await flushLearningBridgeQueue()
+    const result = await flushLearningBridgeQueue()
+    if (result.status === "flushed" && result.flushedCaptureCount > 0) {
+      await refreshLearningProjectionCacheAfterWrite(tabsApi)
+    }
+    return result
   })
 
   onMessage("getLearningProjectionTerms", async (message) => {
@@ -59,7 +76,7 @@ export function setupLearningBridgeMessageHandlers() {
   })
 
   onMessage("syncLearningProjectionCache", async () => {
-    return await syncLearningProjectionCacheAndNotifyIfChanged()
+    return await syncLearningProjectionCacheAndNotifyIfChanged(tabsApi)
   })
 }
 

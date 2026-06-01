@@ -67,11 +67,13 @@ describe("background learning bridge", () => {
 
   it("registers bridge message handlers", async () => {
     const { setupLearningBridgeMessageHandlers } = await import("../learning-bridge")
-    setupLearningBridgeMessageHandlers()
+    setupLearningBridgeMessageHandlers({
+      query: tabsQueryMock,
+    } as never)
 
     getLearningBridgeStatusMock.mockResolvedValue({ state: "offline" })
     syncLearningCaptureSelectionMock.mockResolvedValue({ status: "queued" })
-    flushLearningBridgeQueueMock.mockResolvedValue({ status: "flushed" })
+    flushLearningBridgeQueueMock.mockResolvedValue({ status: "flushed", flushedCaptureCount: 0 })
     getLearningProjectionTermsMock.mockResolvedValue({ status: "ok", entries: [] })
     syncLearningProjectionCacheMock.mockResolvedValue({ status: "synced", entryCount: 1, changed: false })
 
@@ -79,7 +81,10 @@ describe("background learning bridge", () => {
     await expect(getRegisteredMessageHandler("syncLearningCaptureSelection")({
       data: { text: "workflow" },
     })).resolves.toEqual({ status: "queued" })
-    await expect(getRegisteredMessageHandler("flushLearningBridgeQueue")({ data: {} })).resolves.toEqual({ status: "flushed" })
+    await expect(getRegisteredMessageHandler("flushLearningBridgeQueue")({ data: {} })).resolves.toEqual({
+      status: "flushed",
+      flushedCaptureCount: 0,
+    })
     await expect(getRegisteredMessageHandler("getLearningProjectionTerms")({
       data: { terms: ["workflow"] },
     })).resolves.toEqual({ status: "ok", entries: [] })
@@ -87,6 +92,118 @@ describe("background learning bridge", () => {
 
     expect(syncLearningCaptureSelectionMock).toHaveBeenCalledWith({ text: "workflow" })
     expect(getLearningProjectionTermsMock).toHaveBeenCalledWith(["workflow"])
+  })
+
+  it("syncs projection and refreshes translated tabs after a capture is written to the daemon", async () => {
+    syncLearningCaptureSelectionMock.mockResolvedValue({
+      status: "synced",
+      pendingCaptureCount: 0,
+      flushedCaptureCount: 0,
+    })
+    syncLearningProjectionCacheMock.mockResolvedValue({
+      status: "synced",
+      entryCount: 3,
+      changed: true,
+    })
+    getPageTranslationEnabledMock.mockImplementation(async (tabId: number) => tabId === 42)
+    tabsQueryMock.mockResolvedValue([
+      { id: 41 },
+      { id: 42 },
+    ])
+    sendMessageMock.mockResolvedValue(undefined)
+
+    const { setupLearningBridgeMessageHandlers } = await import("../learning-bridge")
+    setupLearningBridgeMessageHandlers({
+      query: tabsQueryMock,
+    } as never)
+
+    await expect(getRegisteredMessageHandler("syncLearningCaptureSelection")({
+      data: { text: "workflow" },
+    })).resolves.toEqual({
+      status: "synced",
+      pendingCaptureCount: 0,
+      flushedCaptureCount: 0,
+    })
+
+    expect(syncLearningProjectionCacheMock).toHaveBeenCalledOnce()
+    expect(sendMessageMock).toHaveBeenCalledWith("refreshLearningPageTranslation", undefined, 42)
+    expect(sendMessageMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not refresh translated tabs after a queued capture", async () => {
+    syncLearningCaptureSelectionMock.mockResolvedValue({
+      status: "queued",
+      pendingCaptureCount: 1,
+      flushedCaptureCount: 0,
+    })
+
+    const { setupLearningBridgeMessageHandlers } = await import("../learning-bridge")
+    setupLearningBridgeMessageHandlers({
+      query: tabsQueryMock,
+    } as never)
+
+    await expect(getRegisteredMessageHandler("syncLearningCaptureSelection")({
+      data: { text: "workflow" },
+    })).resolves.toEqual({
+      status: "queued",
+      pendingCaptureCount: 1,
+      flushedCaptureCount: 0,
+    })
+
+    expect(syncLearningProjectionCacheMock).not.toHaveBeenCalled()
+    expect(sendMessageMock).not.toHaveBeenCalled()
+  })
+
+  it("syncs projection and refreshes translated tabs after queued captures flush", async () => {
+    flushLearningBridgeQueueMock.mockResolvedValue({
+      status: "flushed",
+      pendingCaptureCount: 0,
+      flushedCaptureCount: 2,
+    })
+    syncLearningProjectionCacheMock.mockResolvedValue({
+      status: "synced",
+      entryCount: 5,
+      changed: true,
+    })
+    getPageTranslationEnabledMock.mockResolvedValue(true)
+    tabsQueryMock.mockResolvedValue([{ id: 42 }])
+    sendMessageMock.mockResolvedValue(undefined)
+
+    const { setupLearningBridgeMessageHandlers } = await import("../learning-bridge")
+    setupLearningBridgeMessageHandlers({
+      query: tabsQueryMock,
+    } as never)
+
+    await expect(getRegisteredMessageHandler("flushLearningBridgeQueue")({ data: {} })).resolves.toEqual({
+      status: "flushed",
+      pendingCaptureCount: 0,
+      flushedCaptureCount: 2,
+    })
+
+    expect(syncLearningProjectionCacheMock).toHaveBeenCalledOnce()
+    expect(sendMessageMock).toHaveBeenCalledWith("refreshLearningPageTranslation", undefined, 42)
+  })
+
+  it("does not sync projection after an empty queue flush", async () => {
+    flushLearningBridgeQueueMock.mockResolvedValue({
+      status: "flushed",
+      pendingCaptureCount: 0,
+      flushedCaptureCount: 0,
+    })
+
+    const { setupLearningBridgeMessageHandlers } = await import("../learning-bridge")
+    setupLearningBridgeMessageHandlers({
+      query: tabsQueryMock,
+    } as never)
+
+    await expect(getRegisteredMessageHandler("flushLearningBridgeQueue")({ data: {} })).resolves.toEqual({
+      status: "flushed",
+      pendingCaptureCount: 0,
+      flushedCaptureCount: 0,
+    })
+
+    expect(syncLearningProjectionCacheMock).not.toHaveBeenCalled()
+    expect(sendMessageMock).not.toHaveBeenCalled()
   })
 
   it("registers a projection sync alarm and notifies translated tabs when a matching alarm changes projection", async () => {
