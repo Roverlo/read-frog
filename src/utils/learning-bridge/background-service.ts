@@ -241,6 +241,34 @@ export async function flushLearningBridgeQueue(
     }
   }
 
+  try {
+    const health = await client.getHealth(config)
+    if (getHealthState(health) !== "connected") {
+      return {
+        status: "incompatible",
+        pendingCaptureCount: pendingCaptures.length,
+        pendingQwertyWordRecordCount: pendingQwertyWordRecords.length,
+        pendingQwertyChapterRecordCount: pendingQwertyChapterRecords.length,
+        flushedCaptureCount: 0,
+        flushedQwertyWordRecordCount: 0,
+        flushedQwertyChapterRecordCount: 0,
+        error: `Expected contract ${LEARNING_CONTRACT_VERSION}, got ${health.contractVersion}`,
+      }
+    }
+  }
+  catch (error) {
+    return {
+      status: "offline",
+      pendingCaptureCount: pendingCaptures.length,
+      pendingQwertyWordRecordCount: pendingQwertyWordRecords.length,
+      pendingQwertyChapterRecordCount: pendingQwertyChapterRecords.length,
+      flushedCaptureCount: 0,
+      flushedQwertyWordRecordCount: 0,
+      flushedQwertyChapterRecordCount: 0,
+      error: getErrorMessage(error),
+    }
+  }
+
   let flushedCaptureCount = 0
   let flushedQwertyWordRecordCount = 0
   let flushedQwertyChapterRecordCount = 0

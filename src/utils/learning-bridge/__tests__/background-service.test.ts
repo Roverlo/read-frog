@@ -171,7 +171,9 @@ describe("learning bridge background service", () => {
     const { syncLearningCaptureSelection } = await import("../background-service")
     const { store, getPending } = createStore()
     const client = {
-      getHealth: vi.fn(),
+      getHealth: vi.fn(async () => {
+        throw new Error("daemon offline")
+      }),
       captureSelection: vi.fn(async () => {
         throw new Error("daemon offline")
       }),
@@ -220,7 +222,7 @@ describe("learning bridge background service", () => {
     const { store, getPending } = createStore([queued])
     const syncedIds: string[] = []
     const client = {
-      getHealth: vi.fn(),
+      getHealth: vi.fn(async () => createHealth()),
       captureSelection: vi.fn(async (capture: LearningCaptureSelectionRequest) => {
         syncedIds.push(capture.id)
       }),
@@ -250,6 +252,50 @@ describe("learning bridge background service", () => {
     })
     expect(syncedIds).toEqual(["queued-1", "capture-2"])
     expect(getPending()).toEqual([])
+  })
+
+  it("does not flush queued learning data into an incompatible daemon", async () => {
+    const { flushLearningBridgeQueue } = await import("../background-service")
+    const queuedCapture: LearningCaptureSelectionRequest = {
+      id: "queued-1",
+      text: "ability",
+      createdAt: "2026-05-31T00:00:00.000Z",
+      extractedItems: [],
+    }
+    const queuedWord: LearningQwertyWordRecordRequest = {
+      word: "workflow",
+      input: "workflow",
+      correct: true,
+      accuracy: 1,
+      durationMs: 1200,
+      mistakes: [],
+    }
+    const { store, getPending, getPendingQwertyWordRecords } = createStore([queuedCapture], undefined, [queuedWord])
+    const client = {
+      getHealth: vi.fn(async () => createHealth({ contractVersion: 999 })),
+      captureSelection: vi.fn(),
+      recordQwertyWord: vi.fn(),
+      recordQwertyChapter: vi.fn(),
+      importLearningData: vi.fn(),
+      getWorkspaceState: vi.fn(),
+      getProjection: vi.fn(),
+      getProjectionTerms: vi.fn(),
+    }
+
+    await expect(flushLearningBridgeQueue({ store, client })).resolves.toEqual({
+      status: "incompatible",
+      pendingCaptureCount: 1,
+      pendingQwertyWordRecordCount: 1,
+      pendingQwertyChapterRecordCount: 0,
+      flushedCaptureCount: 0,
+      flushedQwertyWordRecordCount: 0,
+      flushedQwertyChapterRecordCount: 0,
+      error: "Expected contract 1, got 999",
+    })
+    expect(client.captureSelection).not.toHaveBeenCalled()
+    expect(client.recordQwertyWord).not.toHaveBeenCalled()
+    expect(getPending()).toEqual([queuedCapture])
+    expect(getPendingQwertyWordRecords()).toEqual([queuedWord])
   })
 
   it("returns projection entries from a connected daemon and updates the local projection cache", async () => {

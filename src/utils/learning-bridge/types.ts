@@ -44,7 +44,7 @@ export interface LearningBridgeCaptureResult {
 }
 
 export interface LearningBridgeFlushResult {
-  status: "flushed" | "offline" | "disabled"
+  status: "flushed" | "offline" | "disabled" | "incompatible"
   pendingCaptureCount: number
   pendingQwertyWordRecordCount: number
   pendingQwertyChapterRecordCount: number
