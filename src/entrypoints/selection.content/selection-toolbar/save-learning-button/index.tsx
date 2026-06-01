@@ -6,10 +6,21 @@ import { toast } from "sonner"
 import { isLLMProviderConfig } from "@/types/config/provider"
 import { configFieldsAtomMap } from "@/utils/atoms/config"
 import { extractLearningChildren, generateLearningExplanation } from "@/utils/learning/ai"
-import { upsertLearningItem } from "@/utils/learning/items"
 import { sendMessage } from "@/utils/message"
 import { SelectionToolbarTooltip, useSelectionTooltipState } from "../../components/selection-tooltip"
 import { selectionSessionAtom } from "../atoms"
+
+function getSavedMessage(childCount: number) {
+  return childCount > 0
+    ? `已同步到学习容器，并抽取 ${childCount} 个重点`
+    : "已同步到学习容器"
+}
+
+function getQueuedMessage(childCount: number) {
+  return childCount > 0
+    ? `学习容器离线，已加入待同步队列，并抽取 ${childCount} 个重点`
+    : "学习容器离线，已加入待同步队列"
+}
 
 export function SaveLearningButton() {
   const selectionSession = useAtomValue(selectionSessionAtom)
@@ -39,33 +50,13 @@ export function SaveLearningButton() {
         context,
         providerConfig,
       })
-
-      const parent = await upsertLearningItem({
-        text,
-        context,
-        source: "selection",
-        sourceTitle: document.title || undefined,
-        sourceUrl: location.href,
-        explanation,
-      })
       const children = await extractLearningChildren({
         text,
         context,
         providerConfig,
       })
-      await Promise.all(children.map(child => upsertLearningItem({
-        text: child.text,
-        kind: child.kind,
-        context,
-        source: "selection",
-        sourceTitle: document.title || undefined,
-        sourceUrl: location.href,
-        parentId: parent.id,
-        explanation: child.explanation,
-        tags: child.tags,
-      })))
 
-      void sendMessage("syncLearningCaptureSelection", {
+      const result = await sendMessage("syncLearningCaptureSelection", {
         text,
         context,
         sourceTitle: document.title || undefined,
@@ -77,12 +68,20 @@ export function SaveLearningButton() {
           explanation: child.explanation,
           tags: child.tags,
         })),
-      }).catch(() => {})
+      })
 
-      toast.success(children.length > 0 ? `已加入待学习库，并抽取 ${children.length} 个重点` : "已加入待学习库")
+      if (result.status === "synced") {
+        toast.success(getSavedMessage(children.length))
+      }
+      else if (result.status === "queued") {
+        toast.success(getQueuedMessage(children.length))
+      }
+      else {
+        toast.error("学习容器桥接已关闭")
+      }
     }
     catch (error) {
-      toast.error("保存到待学习库失败", {
+      toast.error("保存到学习容器失败", {
         description: error instanceof Error ? error.message : undefined,
       })
     }
@@ -91,7 +90,7 @@ export function SaveLearningButton() {
     }
   }, [handlePress, isSaving, providerConfig, selectionSession])
 
-  const tooltipText = isSaving ? "保存中..." : "加入待学习"
+  const tooltipText = isSaving ? "保存中..." : "加入学习容器"
 
   return (
     <SelectionToolbarTooltip
