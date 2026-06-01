@@ -22,7 +22,7 @@ describe("selective learning translation", () => {
     expect(summary).toContain("ability: 能力；才能")
   })
 
-  it("skips mature and archived daemon projection entries", async () => {
+  it("skips mastered projection entries only when they are confident and not due", async () => {
     sendMessageMock.mockResolvedValue({
       status: "ok",
       projectionVersion: "projection-1",
@@ -44,6 +44,23 @@ describe("selective learning translation", () => {
           updatedAt: "2026-06-01T00:00:00.000Z",
         },
         {
+          normalizedText: "process",
+          kind: "word",
+          status: "mature",
+          confidence: 0.91,
+          definition: "daemon process",
+          dueAt: "2000-01-01T00:00:00.000Z",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+        {
+          normalizedText: "structure",
+          kind: "word",
+          status: "mature",
+          confidence: 0.72,
+          definition: "daemon structure",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+        {
           normalizedText: "constraint",
           kind: "word",
           status: "review",
@@ -55,14 +72,16 @@ describe("selective learning translation", () => {
     })
     const { buildLearningTranslationSummary } = await import("../selective-translation")
 
-    const summary = await buildLearningTranslationSummary("The workflow ability has a constraint.", 6)
+    const summary = await buildLearningTranslationSummary("The workflow ability process structure has a constraint.", 6)
 
     expect(summary).not.toContain("workflow")
     expect(summary).not.toContain("ability")
+    expect(summary).toContain("process: daemon process")
+    expect(summary).toContain("structure: daemon structure")
     expect(summary).toContain("constraint: daemon constraint")
   })
 
-  it("returns empty text when every known term is mature or archived in daemon projection", async () => {
+  it("returns empty text when every known term is confidently mastered or archived in daemon projection", async () => {
     sendMessageMock.mockResolvedValue({
       status: "ok",
       projectionVersion: "projection-1",
@@ -92,7 +111,7 @@ describe("selective learning translation", () => {
     expect(summary).toBe("")
   })
 
-  it("uses daemon projection entries and skips mature terms", async () => {
+  it("uses daemon projection entries and skips confidently mastered terms", async () => {
     sendMessageMock.mockResolvedValue({
       status: "ok",
       projectionVersion: "projection-1",

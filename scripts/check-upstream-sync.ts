@@ -139,6 +139,12 @@ const checks = [
     if (!source.includes("getLearningProjectionTerms")) {
       failures.push("selective-translation.ts must query getLearningProjectionTerms")
     }
+    if (!source.includes("shouldTranslateProjectionEntry")) {
+      failures.push("selective-translation.ts must keep mastery decisions behind shouldTranslateProjectionEntry")
+    }
+    if (!source.includes("confidence") || !source.includes("dueAt")) {
+      failures.push("selective-translation.ts must consider daemon confidence and dueAt when deciding whether to translate")
+    }
     if (includesAny(source, localLearningWritePatterns)) {
       failures.push("selective-translation.ts imports or reads local learning persistence")
     }

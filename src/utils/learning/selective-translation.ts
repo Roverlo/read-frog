@@ -12,6 +12,7 @@ export interface LearningTranslationTerm {
 
 const ENGLISH_WORD_RE = /\b[a-z][a-z'-]*\b/gi
 const MIN_WORD_LENGTH = 3
+const MASTERY_SKIP_CONFIDENCE = 0.86
 
 const VOCAB_DEFINITION_MAP = new Map(
   VOCAB_LIST.map(entry => [normalizeLearningText(entry.word), entry.definitionZh]),
@@ -65,6 +66,26 @@ function findProjectionEntryForWord(entriesByText: Map<string, MasteryProjection
     .find(Boolean)
 }
 
+function isProjectionEntryDue(entry: MasteryProjectionEntry, now = new Date()) {
+  return entry.dueAt ? Date.parse(entry.dueAt) <= now.getTime() : false
+}
+
+export function shouldTranslateProjectionEntry(entry: MasteryProjectionEntry, now = new Date()) {
+  if (entry.status === "archived") {
+    return false
+  }
+
+  if (
+    entry.status === "mature"
+    && entry.confidence >= MASTERY_SKIP_CONFIDENCE
+    && !isProjectionEntryDue(entry, now)
+  ) {
+    return false
+  }
+
+  return true
+}
+
 async function getProjectionEntriesByWord(uniqueWords: string[]) {
   try {
     const terms = [...new Set(uniqueWords.flatMap(getCandidateForms))]
@@ -100,7 +121,7 @@ export async function buildLearningTranslationSummary(text: string, maxTerms: nu
   const terms: LearningTranslationTerm[] = []
   for (const word of uniqueWords) {
     const projectionEntry = findProjectionEntryForWord(projectionEntriesByText, word)
-    if (projectionEntry?.status === "mature" || projectionEntry?.status === "archived") {
+    if (projectionEntry && !shouldTranslateProjectionEntry(projectionEntry)) {
       continue
     }
 
