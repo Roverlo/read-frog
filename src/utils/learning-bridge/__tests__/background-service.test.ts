@@ -1,5 +1,13 @@
-import type { LearningBridgeConfig, LearningCaptureQueueStore } from "../types"
-import type { LearningCaptureSelectionRequest, LearningDaemonHealthResponse } from "@/utils/learning-contracts"
+import type {
+  LearningBridgeConfig,
+  LearningBridgeProjectionCache,
+  LearningCaptureQueueStore,
+} from "../types"
+import type {
+  LearningCaptureSelectionRequest,
+  LearningDaemonHealthResponse,
+  MasteryProjectionEntry,
+} from "@/utils/learning-contracts"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const config: LearningBridgeConfig = {
@@ -17,8 +25,27 @@ function createHealth(overrides: Partial<LearningDaemonHealthResponse> = {}): Le
   }
 }
 
-function createStore(seed: LearningCaptureSelectionRequest[] = []) {
+function createProjectionEntry(overrides: Partial<MasteryProjectionEntry> = {}): MasteryProjectionEntry {
+  return {
+    normalizedText: "workflow",
+    kind: "word",
+    status: "learning",
+    confidence: 0.35,
+    definition: "workflow definition",
+    updatedAt: "2026-06-01T00:00:00.000Z",
+    ...overrides,
+  }
+}
+
+function createStore(
+  seed: LearningCaptureSelectionRequest[] = [],
+  cacheSeed?: LearningBridgeProjectionCache,
+) {
   let pending = [...seed]
+  let projectionCache: LearningBridgeProjectionCache = cacheSeed ?? {
+    projectionVersion: undefined,
+    entries: [],
+  }
   const store: LearningCaptureQueueStore = {
     getConfig: vi.fn(async () => config),
     getPendingCaptures: vi.fn(async () => pending),
@@ -29,8 +56,16 @@ function createStore(seed: LearningCaptureSelectionRequest[] = []) {
       pending = [...pending, capture]
       return pending
     }),
+    getProjectionCache: vi.fn(async () => projectionCache),
+    replaceProjectionCache: vi.fn(async (cache) => {
+      projectionCache = { ...cache, entries: [...cache.entries] }
+    }),
   }
-  return { store, getPending: () => pending }
+  return {
+    store,
+    getPending: () => pending,
+    getProjectionCache: () => projectionCache,
+  }
 }
 
 describe("learning bridge background service", () => {
@@ -44,6 +79,7 @@ describe("learning bridge background service", () => {
     const client = {
       getHealth: vi.fn(async () => createHealth()),
       captureSelection: vi.fn(),
+      getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
     }
 
@@ -63,6 +99,7 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(async () => {
         throw new Error("daemon offline")
       }),
+      getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
     }
 
@@ -105,6 +142,7 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(async (capture: LearningCaptureSelectionRequest) => {
         syncedIds.push(capture.id)
       }),
+      getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
     }
 
@@ -126,41 +164,49 @@ describe("learning bridge background service", () => {
     expect(getPending()).toEqual([])
   })
 
-  it("returns projection entries from a connected daemon", async () => {
+  it("returns projection entries from a connected daemon and updates the local projection cache", async () => {
     const { getLearningProjectionTerms } = await import("../background-service")
-    const { store } = createStore()
+    const { store, getProjectionCache } = createStore()
     const client = {
       getHealth: vi.fn(async () => createHealth()),
       captureSelection: vi.fn(),
+      getProjection: vi.fn(),
       getProjectionTerms: vi.fn(async (terms: string[]) => ({
         ok: true as const,
         projectionVersion: "projection-2",
-        entries: terms.map(term => ({
+        eventId: "event-2",
+        entries: terms.map(term => createProjectionEntry({
           normalizedText: term,
-          kind: "word" as const,
-          status: "learning" as const,
-          confidence: 0.35,
-          definition: "工作流",
-          updatedAt: "2026-06-01T00:00:00.000Z",
+          definition: "daemon definition",
         })),
       })),
     }
 
-    await expect(getLearningProjectionTerms(["workflow"], { store, client })).resolves.toEqual({
+    await expect(getLearningProjectionTerms(["workflow"], {
+      store,
+      client,
+      now: () => "2026-06-01T00:01:00.000Z",
+    })).resolves.toEqual({
       status: "ok",
       projectionVersion: "projection-2",
-      entries: [{
-        normalizedText: "workflow",
-        kind: "word",
-        status: "learning",
-        confidence: 0.35,
-        definition: "工作流",
-        updatedAt: "2026-06-01T00:00:00.000Z",
-      }],
+      entries: [
+        createProjectionEntry({ definition: "daemon definition" }),
+      ],
+    })
+    expect(getProjectionCache()).toMatchObject({
+      projectionVersion: "projection-2",
+      eventId: "event-2",
+      syncedAt: "2026-06-01T00:01:00.000Z",
+      entries: [
+        {
+          normalizedText: "workflow",
+          definition: "daemon definition",
+        },
+      ],
     })
   })
 
-  it("returns an offline projection result when the daemon cannot be reached", async () => {
+  it("returns an offline projection result when the daemon cannot be reached and cache misses", async () => {
     const { getLearningProjectionTerms } = await import("../background-service")
     const { store } = createStore()
     const client = {
@@ -168,6 +214,7 @@ describe("learning bridge background service", () => {
         throw new Error("daemon offline")
       }),
       captureSelection: vi.fn(),
+      getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
     }
 
@@ -175,6 +222,79 @@ describe("learning bridge background service", () => {
       status: "offline",
       entries: [],
       error: "daemon offline",
+    })
+  })
+
+  it("returns cached projection entries when the daemon is offline", async () => {
+    const { getLearningProjectionTerms } = await import("../background-service")
+    const cachedWorkflow = createProjectionEntry({
+      normalizedText: "workflow",
+      status: "mature",
+      confidence: 0.98,
+    })
+    const { store } = createStore([], {
+      projectionVersion: "projection-cached",
+      syncedAt: "2026-06-01T00:00:00.000Z",
+      entries: [
+        cachedWorkflow,
+        createProjectionEntry({
+          normalizedText: "ability",
+          definition: "ability definition",
+        }),
+      ],
+    })
+    const client = {
+      getHealth: vi.fn(async () => {
+        throw new Error("daemon offline")
+      }),
+      captureSelection: vi.fn(),
+      getProjection: vi.fn(),
+      getProjectionTerms: vi.fn(),
+    }
+
+    await expect(getLearningProjectionTerms(["workflow", "missing"], { store, client })).resolves.toEqual({
+      status: "cached",
+      projectionVersion: "projection-cached",
+      entries: [cachedWorkflow],
+      error: "daemon offline",
+    })
+  })
+
+  it("syncs the full daemon projection into extension cache", async () => {
+    const { syncLearningProjectionCache } = await import("../background-service")
+    const { store, getProjectionCache } = createStore()
+    const client = {
+      getHealth: vi.fn(async () => createHealth()),
+      captureSelection: vi.fn(),
+      getProjection: vi.fn(async () => ({
+        ok: true as const,
+        projectionVersion: "projection-3",
+        eventId: "event-3",
+        entries: [
+          createProjectionEntry({ normalizedText: "workflow" }),
+          createProjectionEntry({ normalizedText: "constraint" }),
+        ],
+      })),
+      getProjectionTerms: vi.fn(),
+    }
+
+    await expect(syncLearningProjectionCache({
+      store,
+      client,
+      now: () => "2026-06-01T00:03:00.000Z",
+    })).resolves.toEqual({
+      status: "synced",
+      projectionVersion: "projection-3",
+      entryCount: 2,
+    })
+    expect(getProjectionCache()).toMatchObject({
+      projectionVersion: "projection-3",
+      eventId: "event-3",
+      syncedAt: "2026-06-01T00:03:00.000Z",
+      entries: [
+        { normalizedText: "workflow" },
+        { normalizedText: "constraint" },
+      ],
     })
   })
 })

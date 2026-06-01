@@ -41,10 +41,24 @@ export interface LearningBridgeFlushResult {
 }
 
 export interface LearningBridgeProjectionTermsResult {
-  status: "ok" | "offline" | "disabled" | "incompatible"
+  status: "ok" | "cached" | "offline" | "disabled" | "incompatible"
   projectionVersion?: string
   entries: MasteryProjectionEntry[]
   error?: string
+}
+
+export interface LearningBridgeProjectionSyncResult {
+  status: "synced" | "offline" | "disabled" | "incompatible"
+  projectionVersion?: string
+  entryCount: number
+  error?: string
+}
+
+export interface LearningBridgeProjectionCache {
+  projectionVersion?: string
+  eventId?: string
+  syncedAt?: string
+  entries: MasteryProjectionEntry[]
 }
 
 export interface LearningCaptureQueueStore {
@@ -52,4 +66,6 @@ export interface LearningCaptureQueueStore {
   getPendingCaptures: () => Promise<LearningCaptureSelectionRequest[]>
   replacePendingCaptures: (captures: LearningCaptureSelectionRequest[]) => Promise<void>
   enqueueCapture: (capture: LearningCaptureSelectionRequest) => Promise<LearningCaptureSelectionRequest[]>
+  getProjectionCache: () => Promise<LearningBridgeProjectionCache>
+  replaceProjectionCache: (cache: LearningBridgeProjectionCache) => Promise<void>
 }

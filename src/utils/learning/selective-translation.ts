@@ -78,7 +78,7 @@ async function getProjectionEntriesByWord(uniqueWords: string[]) {
     const terms = [...new Set(uniqueWords.flatMap(getCandidateForms))]
       .slice(0, MAX_MASTERY_PROJECTION_TERMS)
     const response = await sendMessage("getLearningProjectionTerms", { terms })
-    if (response.status !== "ok") {
+    if (response.status !== "ok" && response.status !== "cached") {
       return new Map<string, MasteryProjectionEntry>()
     }
 

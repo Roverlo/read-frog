@@ -113,6 +113,38 @@ describe("selective learning translation", () => {
     })
   })
 
+  it("uses cached daemon projection entries while the daemon is offline", async () => {
+    sendMessageMock.mockResolvedValue({
+      status: "cached",
+      projectionVersion: "projection-cached",
+      entries: [
+        {
+          normalizedText: "workflow",
+          kind: "word",
+          status: "mature",
+          confidence: 0.98,
+          definition: "cached workflow",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+        {
+          normalizedText: "constraint",
+          kind: "word",
+          status: "review",
+          confidence: 0.62,
+          definition: "cached constraint",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+      error: "daemon offline",
+    })
+    const { buildLearningTranslationSummary } = await import("../selective-translation")
+
+    const summary = await buildLearningTranslationSummary("The workflow has a constraint.", 6)
+
+    expect(summary).not.toContain("workflow")
+    expect(summary).toContain("constraint: cached constraint")
+  })
+
   it("lets daemon projection override stale local mastered state", async () => {
     mockRows.push({ id: "1", kind: "word", normalizedText: "workflow", status: "mastered" })
     sendMessageMock.mockResolvedValue({

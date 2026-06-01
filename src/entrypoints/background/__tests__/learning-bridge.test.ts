@@ -5,9 +5,25 @@ const getLearningBridgeStatusMock = vi.fn()
 const syncLearningCaptureSelectionMock = vi.fn()
 const flushLearningBridgeQueueMock = vi.fn()
 const getLearningProjectionTermsMock = vi.fn()
+const syncLearningProjectionCacheMock = vi.fn()
+const alarmsGetMock = vi.fn()
+const alarmsCreateMock = vi.fn()
+const alarmsAddListenerMock = vi.fn()
 
 vi.mock("@/utils/message", () => ({
   onMessage: onMessageMock,
+}))
+
+vi.mock("#imports", () => ({
+  browser: {
+    alarms: {
+      get: alarmsGetMock,
+      create: alarmsCreateMock,
+      onAlarm: {
+        addListener: alarmsAddListenerMock,
+      },
+    },
+  },
 }))
 
 vi.mock("@/utils/learning-bridge", () => ({
@@ -15,6 +31,7 @@ vi.mock("@/utils/learning-bridge", () => ({
   syncLearningCaptureSelection: syncLearningCaptureSelectionMock,
   flushLearningBridgeQueue: flushLearningBridgeQueueMock,
   getLearningProjectionTerms: getLearningProjectionTermsMock,
+  syncLearningProjectionCache: syncLearningProjectionCacheMock,
 }))
 
 function getRegisteredMessageHandler(name: string) {
@@ -39,6 +56,7 @@ describe("background learning bridge", () => {
     syncLearningCaptureSelectionMock.mockResolvedValue({ status: "queued" })
     flushLearningBridgeQueueMock.mockResolvedValue({ status: "flushed" })
     getLearningProjectionTermsMock.mockResolvedValue({ status: "ok", entries: [] })
+    syncLearningProjectionCacheMock.mockResolvedValue({ status: "synced", entryCount: 1 })
 
     await expect(getRegisteredMessageHandler("getLearningBridgeStatus")({ data: {} })).resolves.toEqual({ state: "offline" })
     await expect(getRegisteredMessageHandler("syncLearningCaptureSelection")({
@@ -48,8 +66,47 @@ describe("background learning bridge", () => {
     await expect(getRegisteredMessageHandler("getLearningProjectionTerms")({
       data: { terms: ["workflow"] },
     })).resolves.toEqual({ status: "ok", entries: [] })
+    await expect(getRegisteredMessageHandler("syncLearningProjectionCache")({ data: {} })).resolves.toEqual({ status: "synced", entryCount: 1 })
 
     expect(syncLearningCaptureSelectionMock).toHaveBeenCalledWith({ text: "workflow" })
     expect(getLearningProjectionTermsMock).toHaveBeenCalledWith(["workflow"])
+  })
+
+  it("registers a projection sync alarm and syncs on matching alarms", async () => {
+    alarmsGetMock.mockResolvedValue(null)
+    alarmsCreateMock.mockResolvedValue(undefined)
+    let alarmListener: ((alarm: { name: string }) => void) | undefined
+    alarmsAddListenerMock.mockImplementation((listener: (alarm: { name: string }) => void) => {
+      alarmListener = listener
+    })
+
+    const {
+      LEARNING_PROJECTION_SYNC_ALARM,
+      LEARNING_PROJECTION_SYNC_INTERVAL_MINUTES,
+      setupLearningProjectionSyncAlarm,
+    } = await import("../learning-bridge")
+
+    await setupLearningProjectionSyncAlarm({
+      get: alarmsGetMock,
+      create: alarmsCreateMock,
+      onAlarm: {
+        addListener: alarmsAddListenerMock,
+      },
+    } as never)
+
+    expect(alarmsCreateMock).toHaveBeenCalledWith(LEARNING_PROJECTION_SYNC_ALARM, {
+      delayInMinutes: 1,
+      periodInMinutes: LEARNING_PROJECTION_SYNC_INTERVAL_MINUTES,
+    })
+    expect(alarmsAddListenerMock).toHaveBeenCalledTimes(1)
+    if (!alarmListener) {
+      throw new Error("Expected learning projection alarm listener")
+    }
+
+    alarmListener({ name: "other-alarm" })
+    expect(syncLearningProjectionCacheMock).not.toHaveBeenCalled()
+
+    alarmListener({ name: LEARNING_PROJECTION_SYNC_ALARM })
+    expect(syncLearningProjectionCacheMock).toHaveBeenCalledTimes(1)
   })
 })
