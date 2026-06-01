@@ -10,58 +10,74 @@
   <div class="shell">
     <header class="topbar">
       <div class="brand">
-        <div class="mark" aria-hidden="true">R</div>
-        <h1>Learning Workspace</h1>
+        <div class="mark" aria-hidden="true">RF</div>
+        <div>
+          <h1>Learning Workspace</h1>
+          <div class="subtitle">Daemon-owned practice, projection, and reading memory</div>
+        </div>
       </div>
       <div class="status-strip">
         <span class="pill"><span id="health-dot" class="dot"></span><span id="health-text">Connecting</span></span>
-        <span class="pill" id="version-pill">projection-0</span>
-        <button class="secondary" id="refresh-button" type="button">Refresh</button>
+        <span class="pill code" id="version-pill">projection-0</span>
+        <button class="secondary compact" id="refresh-button" type="button">Refresh</button>
       </div>
     </header>
 
     <div class="workspace">
       <aside class="rail" aria-label="Workspace navigation">
-        <nav class="nav">
-          <button type="button" aria-current="page">Today</button>
-          <button type="button">Practice</button>
-          <button type="button">Reading Inbox</button>
-          <button type="button">Decks</button>
-          <button type="button">Error Book</button>
-          <button type="button">Analytics</button>
-        </nav>
-        <div class="meta-block">
-          <div>Daemon: <strong id="daemon-service">unknown</strong></div>
-          <div>Contract: <strong id="contract-version">unknown</strong></div>
-          <div>Source: captures + qwerty records</div>
+        <div class="rail-section">
+          <div class="rail-label">Views</div>
+          <nav class="nav">
+            <button type="button" aria-current="page">Command</button>
+            <button type="button">Qwerty</button>
+            <button type="button">Projection</button>
+            <button type="button">Inbox</button>
+            <button type="button">Errors</button>
+          </nav>
+        </div>
+
+        <div class="rail-section">
+          <div class="rail-label">Container</div>
+          <div class="meta-block">
+            <div><span>Daemon</span><strong id="daemon-service">unknown</strong></div>
+            <div><span>Contract</span><strong id="contract-version">unknown</strong></div>
+            <div><span>Owner</span><strong>local container</strong></div>
+          </div>
         </div>
       </aside>
 
       <main class="main">
-        <section class="metrics" aria-label="Mastery distribution">
-          <div class="metric">
-            <div class="label">Learning</div>
-            <div class="value" id="metric-learning">0</div>
+        <section class="hero-panel" aria-label="Learning workspace overview">
+          <div>
+            <div class="eyebrow">Mastery projection</div>
+            <h2>Translate less as words become yours.</h2>
+            <p>Extension captures and qwerty practice update this daemon projection; the browser extension only reads the bridge cache.</p>
           </div>
-          <div class="metric">
-            <div class="label">Review</div>
-            <div class="value" id="metric-review">0</div>
-          </div>
-          <div class="metric">
-            <div class="label">Mature</div>
-            <div class="value" id="metric-mature">0</div>
-          </div>
-          <div class="metric">
-            <div class="label">Archived</div>
-            <div class="value" id="metric-archived">0</div>
-          </div>
+          <section class="metrics" aria-label="Mastery distribution">
+            <div class="metric">
+              <div class="label">Learning</div>
+              <div class="value" id="metric-learning">0</div>
+            </div>
+            <div class="metric">
+              <div class="label">Review</div>
+              <div class="value" id="metric-review">0</div>
+            </div>
+            <div class="metric">
+              <div class="label">Mature</div>
+              <div class="value" id="metric-mature">0</div>
+            </div>
+            <div class="metric">
+              <div class="label">Archived</div>
+              <div class="value" id="metric-archived">0</div>
+            </div>
+          </section>
         </section>
 
         <section class="surface practice" aria-label="Qwerty practice">
           <div class="stage">
             <div class="stage-head">
               <div>
-                <div class="label">Qwerty practice</div>
+                <div class="label">Active practice</div>
                 <div id="practice-source" class="source-line">Projection queue</div>
               </div>
               <div class="chapter-chip" id="chapter-chip">Chapter 1</div>
@@ -76,10 +92,11 @@
             </div>
           </div>
           <div class="session" aria-label="Practice session">
+            <div class="session-title">Session</div>
             <div class="session-row"><span>Attempts</span><strong id="session-attempts">0</strong></div>
             <div class="session-row"><span>Correct</span><strong id="session-correct">0</strong></div>
             <div class="session-row"><span>Accuracy</span><strong id="session-accuracy">0%</strong></div>
-            <div class="session-row"><span>Active term</span><strong id="session-active">-</strong></div>
+            <div class="session-row"><span>Active</span><strong id="session-active">-</strong></div>
           </div>
         </section>
 
@@ -90,12 +107,12 @@
               <select id="dictionary-select" aria-label="Select qwerty dictionary"></select>
             </label>
             <div class="chapter-controls">
-              <button id="previous-chapter-button" class="secondary" type="button">Prev</button>
+              <button id="previous-chapter-button" class="secondary compact" type="button">Prev</button>
               <div class="chapter-meta">
                 <strong id="chapter-title">Chapter 1</strong>
                 <span id="chapter-range">0 words</span>
               </div>
-              <button id="next-chapter-button" class="secondary" type="button">Next</button>
+              <button id="next-chapter-button" class="secondary compact" type="button">Next</button>
             </div>
           </div>
           <div id="chapter-word-strip" class="word-strip" aria-label="Current chapter words"></div>

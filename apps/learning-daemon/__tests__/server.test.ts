@@ -102,6 +102,9 @@ describe("learning daemon server", () => {
     expect(html).toContain("/workspace/app.js")
     expect(html).toContain("dictionary-select")
     expect(html).toContain("chapter-word-strip")
+    expect(html).toContain("Daemon-owned practice, projection, and reading memory")
+    expect(html).toContain("Mastery projection")
+    expect(html).toContain("local container")
   })
 
   it("serves workspace static assets without exposing arbitrary files", async () => {
@@ -113,7 +116,10 @@ describe("learning daemon server", () => {
 
     expect(cssResponse.status).toBe(200)
     expect(cssResponse.headers.get("content-type")).toContain("text/css")
-    await expect(cssResponse.text()).resolves.toContain(".workspace")
+    const css = await cssResponse.text()
+    expect(css).toContain(".workspace")
+    expect(css).toContain(".hero-panel")
+    expect(css).toContain("@media (max-width: 760px)")
 
     expect(jsResponse.status).toBe(200)
     expect(jsResponse.headers.get("content-type")).toContain("text/javascript")
