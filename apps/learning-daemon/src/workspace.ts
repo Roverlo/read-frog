@@ -10,8 +10,6 @@ const workspaceAssetPaths = {
   "/workspace/index.html": join(workspaceDir, "index.html"),
 }
 
-const workspaceAssetCache = new Map<string, string>()
-
 export async function readLearningWorkspaceHtml() {
   const html = await readLearningWorkspaceAsset("/workspace/index.html")
   if (html === undefined) {
@@ -39,10 +37,5 @@ export async function readLearningWorkspaceAsset(path: string) {
     return undefined
   }
 
-  let content = workspaceAssetCache.get(path)
-  if (content === undefined) {
-    content = await readFile(filePath, "utf8")
-    workspaceAssetCache.set(path, content)
-  }
-  return content
+  return readFile(filePath, "utf8")
 }

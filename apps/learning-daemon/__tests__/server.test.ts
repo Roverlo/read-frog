@@ -102,9 +102,11 @@ describe("learning daemon server", () => {
     expect(html).toContain("/workspace/app.js")
     expect(html).toContain("dictionary-select")
     expect(html).toContain("chapter-word-strip")
-    expect(html).toContain("Daemon-owned practice, projection, and reading memory")
+    expect(html).toContain("Local daemon cockpit for reading memory and qwerty practice")
     expect(html).toContain("Mastery projection")
-    expect(html).toContain("local container")
+    expect(html).toContain("Data IO")
+    expect(html).toContain("typing-ghost")
+    expect(html).toContain("download-export-button")
   })
 
   it("serves workspace static assets without exposing arbitrary files", async () => {
@@ -118,7 +120,9 @@ describe("learning daemon server", () => {
     expect(cssResponse.headers.get("content-type")).toContain("text/css")
     const css = await cssResponse.text()
     expect(css).toContain(".workspace")
-    expect(css).toContain(".hero-panel")
+    expect(css).toContain(".overview-panel")
+    expect(css).toContain(".typing-ghost")
+    expect(css).toContain(".segmented")
     expect(css).toContain("@media (max-width: 760px)")
 
     expect(jsResponse.status).toBe(200)
@@ -130,6 +134,9 @@ describe("learning daemon server", () => {
     expect(js).toContain("if (!response.ok)")
     expect(js).toContain("await postJson(\"/api/v1/qwerty/records/word\"")
     expect(js).toContain("await postJson(\"/api/v1/qwerty/records/chapter\"")
+    expect(js).toContain("getJson(\"/api/v1/export\")")
+    expect(js).toContain("await postJson(\"/api/v1/import\"")
+    expect(js).toContain("function renderTypingGhost()")
     expect(js).toContain("state.session.recordedChapterKeys = state.session.recordedChapterKeys.filter")
 
     expect(missingResponse.status).toBe(404)

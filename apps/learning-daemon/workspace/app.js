@@ -20,6 +20,7 @@
       eventSource: null,
       eventRefreshTimer: null,
       eventPollTimer: null,
+      lastExportUrl: null,
     };
 
     const $ = (id) => document.getElementById(id);
@@ -46,6 +47,10 @@
       item.className = "empty";
       item.textContent = message;
       return item;
+    }
+
+    function getAccuracyPercent(value) {
+      return Math.round((value ?? 0) * 100) + "%";
     }
 
     function sortEntries(entries) {
@@ -111,13 +116,55 @@
       setText("metric-review", stats?.reviewCount ?? 0);
       setText("metric-mature", stats?.matureCount ?? 0);
       setText("metric-archived", stats?.archivedCount ?? 0);
+      setText("metric-captures", stats?.captureCount ?? 0);
+      setText("metric-qwerty", stats?.qwertyRecordCount ?? 0);
+      setText("metric-accuracy", getAccuracyPercent(stats?.averageAccuracy ?? 0));
       setText("version-pill", state.projection.projectionVersion);
+    }
+
+    function renderModeButtons() {
+      $("mode-projection-button").setAttribute("aria-pressed", String(state.practiceMode !== "deck"));
+      $("mode-deck-button").setAttribute("aria-pressed", String(state.practiceMode === "deck"));
+    }
+
+    function renderTypingGhost() {
+      const ghost = $("typing-ghost");
+      const entry = activeEntry();
+      if (!entry) {
+        ghost.replaceChildren();
+        return;
+      }
+      const word = entry.entry.normalizedText;
+      const input = $("typing-input").value;
+      const nodes = [...word].map((char, index) => {
+        const span = document.createElement("span");
+        const typed = input[index];
+        span.textContent = typed || char;
+        if (typed === undefined) {
+          span.className = index === input.length ? "pending cursor" : "pending";
+        }
+        else if (typed === char) {
+          span.className = "ok";
+        }
+        else {
+          span.className = "bad";
+        }
+        return span;
+      });
+      if (input.length > word.length) {
+        for (const char of input.slice(word.length)) {
+          const span = document.createElement("span");
+          span.className = "bad";
+          span.textContent = char;
+          nodes.push(span);
+        }
+      }
+      ghost.replaceChildren(...nodes);
     }
 
     function renderPractice() {
       const entry = activeEntry();
       const input = $("typing-input");
-      const practiceEntries = getPracticeEntries();
       if (!entry) {
         setText("stage-word", "No terms yet");
         setText("definition", "No projection terms or dictionary words are available.");
@@ -131,18 +178,21 @@
         input.disabled = false;
         setText("session-active", entry.entry.normalizedText);
       }
+      renderModeButtons();
+      renderTypingGhost();
       setText("practice-source", entry?.source === "dictionary"
         ? `${state.dictionary?.name ?? "Deck"} chapter practice`
         : "Projection review queue");
-      setText("chapter-chip", state.dictionary
-        ? `Chapter ${state.chapterIndex + 1}/${state.dictionary.chapterCount}`
-        : "No deck");
       setText("session-attempts", state.session.attempts);
       setText("session-correct", state.session.correct);
       const accuracy = state.session.attempts
         ? Math.round((state.session.correct / state.session.attempts) * 100)
         : 0;
       setText("session-accuracy", accuracy + "%");
+      const chapterTotal = state.dictionaryWords.length;
+      const chapterDone = state.session.chapterResults.length;
+      setText("chapter-progress-text", `${chapterDone}/${chapterTotal}`);
+      $("chapter-progress").style.width = chapterTotal ? `${Math.round((chapterDone / chapterTotal) * 100)}%` : "0%";
       renderChapterWords(entry);
     }
 
@@ -164,6 +214,17 @@
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || "Request failed: " + response.status);
+      }
+      return response.json();
+    }
+
+    async function getJson(path) {
+      const response = await fetch(path, {
+        headers: { accept: "application/json" },
       });
       if (!response.ok) {
         const message = await response.text();
@@ -226,6 +287,7 @@
     function renderProjection() {
       const body = $("projection-body");
       const entries = sortEntries(state.projection.entries);
+      setText("projection-count", entries.length + " entries");
       if (!entries.length) {
         body.replaceChildren(emptyTableRow("No projection terms yet."));
         return;
@@ -357,6 +419,63 @@
       renderErrorBook();
     }
 
+    function scrollToSection(id) {
+      const target = $(id);
+      if (target) {
+        target.scrollIntoView({ block: "start", behavior: "smooth" });
+      }
+      document.querySelectorAll(".nav button").forEach((button) => {
+        button.setAttribute("aria-current", button.dataset.target === id ? "page" : "false");
+      });
+    }
+
+    function downloadBlob(filename, data) {
+      if (state.lastExportUrl) {
+        URL.revokeObjectURL(state.lastExportUrl);
+      }
+      const blob = new Blob([JSON.stringify(data, null, 2) + "\n"], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      state.lastExportUrl = url;
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+    }
+
+    async function exportWorkspaceData() {
+      $("data-status").classList.remove("error");
+      setText("data-status", "Exporting...");
+      try {
+        const data = await getJson("/api/v1/export");
+        downloadBlob(`read-frog-learning-${new Date().toISOString().slice(0, 10)}.json`, data);
+        setText("data-status", `Exported ${data.stats?.projectionEntryCount ?? 0} projection entries.`);
+      }
+      catch (error) {
+        $("data-status").classList.add("error");
+        setText("data-status", error instanceof Error ? error.message : String(error));
+      }
+    }
+
+    async function importWorkspaceData(file) {
+      if (!file) {
+        return;
+      }
+      $("data-status").classList.remove("error");
+      setText("data-status", "Importing...");
+      try {
+        const payload = JSON.parse(await file.text());
+        const response = await postJson("/api/v1/import", payload);
+        setText("data-status", response.changed
+          ? `Imported ${response.imported.projectionEntries} projection changes.`
+          : "Import finished with no changes.");
+        await refresh();
+      }
+      catch (error) {
+        $("data-status").classList.add("error");
+        setText("data-status", error instanceof Error ? error.message : String(error));
+      }
+    }
+
     async function refresh() {
       try {
         const [healthResponse, projectionResponse, workspaceResponse, dictionariesResponse] = await Promise.all([
@@ -373,7 +492,7 @@
         if (!state.dictionaryId && state.dictionaries.length) {
           state.dictionaryId = state.dictionaries[0].id;
         }
-        if (!getPracticeEntries().length && state.dictionaryId) {
+        if (!state.dictionaryWords.length && state.dictionaryId) {
           await loadDictionaryChapter(state.dictionaryId, state.chapterIndex);
         }
         setText("toast", "");
@@ -555,6 +674,32 @@
     }
 
     $("refresh-button").addEventListener("click", refresh);
+    $("export-button").addEventListener("click", exportWorkspaceData);
+    $("download-export-button").addEventListener("click", exportWorkspaceData);
+    $("import-file-input").addEventListener("change", (event) => {
+      const file = event.target.files?.[0];
+      void importWorkspaceData(file);
+      event.target.value = "";
+    });
+    document.querySelectorAll(".nav button").forEach((button) => {
+      button.addEventListener("click", () => {
+        scrollToSection(button.dataset.target);
+      });
+    });
+    $("mode-projection-button").addEventListener("click", () => {
+      state.practiceMode = "projection";
+      state.activeIndex = 0;
+      $("typing-input").value = "";
+      renderPractice();
+      $("typing-input").focus();
+    });
+    $("mode-deck-button").addEventListener("click", () => {
+      state.practiceMode = "deck";
+      state.activeIndex = 0;
+      $("typing-input").value = "";
+      renderPractice();
+      $("typing-input").focus();
+    });
     $("submit-button").addEventListener("click", submitPractice);
     $("dictionary-select").addEventListener("change", (event) => {
       const nextDictionaryId = event.target.value;
@@ -606,5 +751,6 @@
         void submitPractice();
       }
     });
+    $("typing-input").addEventListener("input", renderTypingGhost);
 
     void refresh();

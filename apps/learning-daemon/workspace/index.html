@@ -13,13 +13,13 @@
         <div class="mark" aria-hidden="true">RF</div>
         <div>
           <h1>Learning Workspace</h1>
-          <div class="subtitle">Daemon-owned practice, projection, and reading memory</div>
+          <div class="subtitle">Local daemon cockpit for reading memory and qwerty practice</div>
         </div>
       </div>
       <div class="status-strip">
         <span class="pill"><span id="health-dot" class="dot"></span><span id="health-text">Connecting</span></span>
         <span class="pill code" id="version-pill">projection-0</span>
-        <button class="secondary compact" id="refresh-button" type="button">Refresh</button>
+        <button class="icon-button" id="refresh-button" type="button" title="Refresh" aria-label="Refresh">R</button>
       </div>
     </header>
 
@@ -28,11 +28,12 @@
         <div class="rail-section">
           <div class="rail-label">Views</div>
           <nav class="nav">
-            <button type="button" aria-current="page">Command</button>
-            <button type="button">Qwerty</button>
-            <button type="button">Projection</button>
-            <button type="button">Inbox</button>
-            <button type="button">Errors</button>
+            <button type="button" data-target="overview" aria-current="page">Overview</button>
+            <button type="button" data-target="practice">Qwerty</button>
+            <button type="button" data-target="projection">Projection</button>
+            <button type="button" data-target="inbox">Inbox</button>
+            <button type="button" data-target="errors">Errors</button>
+            <button type="button" data-target="data">Data</button>
           </nav>
         </div>
 
@@ -41,17 +42,17 @@
           <div class="meta-block">
             <div><span>Daemon</span><strong id="daemon-service">unknown</strong></div>
             <div><span>Contract</span><strong id="contract-version">unknown</strong></div>
-            <div><span>Owner</span><strong>local container</strong></div>
+            <div><span>Storage</span><strong>local JSON</strong></div>
           </div>
         </div>
       </aside>
 
       <main class="main">
-        <section class="hero-panel" aria-label="Learning workspace overview">
-          <div>
+        <section class="overview-panel" id="overview" aria-label="Learning workspace overview">
+          <div class="overview-copy">
             <div class="eyebrow">Mastery projection</div>
-            <h2>Translate less as words become yours.</h2>
-            <p>Extension captures and qwerty practice update this daemon projection; the browser extension only reads the bridge cache.</p>
+            <h2>Translate less as the projection gets stronger.</h2>
+            <p>Captures, qwerty records, import data, and deck practice all converge here before the extension reads selective translation terms.</p>
           </div>
           <section class="metrics" aria-label="Mastery distribution">
             <div class="metric">
@@ -71,24 +72,33 @@
               <div class="value" id="metric-archived">0</div>
             </div>
           </section>
+          <section class="quick-stats" aria-label="Learning activity">
+            <div><span>Captures</span><strong id="metric-captures">0</strong></div>
+            <div><span>Qwerty</span><strong id="metric-qwerty">0</strong></div>
+            <div><span>Accuracy</span><strong id="metric-accuracy">0%</strong></div>
+          </section>
         </section>
 
-        <section class="surface practice" aria-label="Qwerty practice">
+        <section class="surface practice" id="practice" aria-label="Qwerty practice">
           <div class="stage">
             <div class="stage-head">
               <div>
                 <div class="label">Active practice</div>
                 <div id="practice-source" class="source-line">Projection queue</div>
               </div>
-              <div class="chapter-chip" id="chapter-chip">Chapter 1</div>
+              <div class="segmented" aria-label="Practice mode">
+                <button id="mode-projection-button" type="button" aria-pressed="true">Review</button>
+                <button id="mode-deck-button" type="button" aria-pressed="false">Deck</button>
+              </div>
             </div>
             <div id="stage-word" class="stage-word">No terms yet</div>
+            <div id="typing-ghost" class="typing-ghost" aria-live="polite"></div>
             <input id="typing-input" class="stage-input" autocomplete="off" spellcheck="false" aria-label="Type current word">
-            <div id="definition" class="definition">Capture a selection from the extension or seed a record to begin.</div>
+            <div id="definition" class="definition">Capture a selection from the extension or load a qwerty deck.</div>
             <div class="actions">
               <button id="submit-button" class="primary" type="button">Submit</button>
               <button id="skip-button" class="secondary" type="button">Next</button>
-              <span id="toast" class="toast"></span>
+              <span id="toast" class="toast" role="status"></span>
             </div>
           </div>
           <div class="session" aria-label="Practice session">
@@ -97,6 +107,8 @@
             <div class="session-row"><span>Correct</span><strong id="session-correct">0</strong></div>
             <div class="session-row"><span>Accuracy</span><strong id="session-accuracy">0%</strong></div>
             <div class="session-row"><span>Active</span><strong id="session-active">-</strong></div>
+            <div class="progress-shell"><div id="chapter-progress" class="progress-bar"></div></div>
+            <div class="session-row"><span>Chapter</span><strong id="chapter-progress-text">0/0</strong></div>
           </div>
         </section>
 
@@ -118,7 +130,14 @@
           <div id="chapter-word-strip" class="word-strip" aria-label="Current chapter words"></div>
         </section>
 
-        <section class="table-wrap" aria-label="Projection terms">
+        <section class="table-wrap" id="projection" aria-label="Projection terms">
+          <div class="table-head">
+            <div>
+              <div class="label">Projection terms</div>
+              <strong id="projection-count">0 entries</strong>
+            </div>
+            <button class="secondary compact" id="export-button" type="button">Export</button>
+          </div>
           <table>
             <thead>
               <tr>
@@ -137,7 +156,7 @@
       </main>
 
       <aside class="context" aria-label="Learning context">
-        <div class="context-section">
+        <section class="context-section" id="inbox">
           <div class="panel-title">
             <h2>Reading Inbox</h2>
             <span class="label" id="inbox-count">0 items</span>
@@ -145,8 +164,8 @@
           <div id="context-list" class="context-list">
             <div class="empty">No daemon data loaded yet.</div>
           </div>
-        </div>
-        <div class="context-section">
+        </section>
+        <section class="context-section" id="errors">
           <div class="panel-title">
             <h2>Error Book</h2>
             <span class="label" id="error-count">0 errors</span>
@@ -155,7 +174,21 @@
             <div class="empty">No qwerty mistakes yet.</div>
           </div>
           <div id="key-mistake-list" class="key-grid" aria-label="Wrong key pairs"></div>
-        </div>
+        </section>
+        <section class="context-section" id="data">
+          <div class="panel-title">
+            <h2>Data IO</h2>
+            <span class="label">portable</span>
+          </div>
+          <div class="data-actions">
+            <button class="secondary" id="download-export-button" type="button">Download export</button>
+            <label class="file-button">
+              <span>Import file</span>
+              <input id="import-file-input" type="file" accept="application/json,.json">
+            </label>
+          </div>
+          <div id="data-status" class="data-status">Idle</div>
+        </section>
       </aside>
     </div>
   </div>
