@@ -182,6 +182,27 @@ function WorkspaceBridge({
       setIsBusy(false)
     }
   }
+
+  const migrateLegacyData = async () => {
+    setIsBusy(true)
+    try {
+      const result = await sendMessage("migrateLegacyLearningDataToDaemon", undefined)
+      if (result.status === "imported") {
+        toast.success("Legacy learning data imported", {
+          description: `${result.captureCount ?? 0} captures, ${result.qwertyWordRecordCount ?? 0} qwerty records, ${result.legacyReviewLogCount ?? 0} review logs.`,
+        })
+      }
+      else {
+        toast.error("Legacy learning data not imported", {
+          description: result.error,
+        })
+      }
+      await refresh()
+    }
+    finally {
+      setIsBusy(false)
+    }
+  }
   const pendingQueueCount = (status?.pendingCaptureCount ?? 0)
     + (status?.pendingQwertyWordRecordCount ?? 0)
     + (status?.pendingQwertyChapterRecordCount ?? 0)
@@ -261,6 +282,10 @@ function WorkspaceBridge({
           <Button type="button" variant="outline" disabled={isBusy || pendingQueueCount === 0} onClick={() => void flushQueue()}>
             <Icon icon="tabler:cloud-upload" />
             Flush bridge queue
+          </Button>
+          <Button type="button" variant="outline" disabled={isBusy || tone !== "connected"} onClick={() => void migrateLegacyData()}>
+            <Icon icon="tabler:database-import" />
+            Import legacy data
           </Button>
           <LearningToggleRows />
         </CardContent>

@@ -193,6 +193,9 @@ const checks = [
     const contracts = readRepoFile("src/utils/learning-contracts/schemas.ts")
     const server = readRepoFile("apps/learning-daemon/src/server.ts")
     const store = readRepoFile("apps/learning-daemon/src/store.ts")
+    const legacyMigration = readRepoFile("src/utils/learning/legacy-migration.ts")
+    const bridgeService = readRepoFile("src/utils/learning-bridge/background-service.ts")
+    const messageProtocol = readRepoFile("src/utils/message.ts")
     const readme = readRepoFile("apps/learning-daemon/README.md")
     const failures: string[] = []
 
@@ -200,6 +203,8 @@ const checks = [
       "learningDaemonExportResponseSchema",
       "learningDaemonImportRequestSchema",
       "read-frog-learning-daemon-v1",
+      "legacyReviewLogs",
+      "legacyReviewSessions",
     ]
     failures.push(...requiredContractTokens
       .filter(text => !contracts.includes(text))
@@ -220,6 +225,7 @@ const checks = [
       "getQwertyWordRecordKey",
       "getQwertyChapterRecordKey",
       "createDerivedProjectionEntries",
+      "getLegacyRecordKey",
     ]
     failures.push(...requiredStoreTokens
       .filter(text => !store.includes(text))
@@ -229,10 +235,35 @@ const checks = [
       "GET /api/v1/export",
       "POST /api/v1/import",
       "Imports are idempotent",
+      "migrateLegacyLearningDataToDaemon",
     ]
     failures.push(...requiredReadmeTokens
       .filter(text => !readme.includes(text))
       .map(text => `learning daemon README is missing import/export docs: ${text}`))
+
+    const requiredLegacyMigrationTokens = [
+      "db.learningItems.toArray",
+      "db.qwertyTypingRecords.toArray",
+      "db.learningReviewLogs.toArray",
+      "db.reviewSessions.toArray",
+      "buildLegacyLearningDaemonImportState",
+    ]
+    failures.push(...requiredLegacyMigrationTokens
+      .filter(text => !legacyMigration.includes(text))
+      .map(text => `legacy migration helper is missing Dexie-to-daemon token: ${text}`))
+
+    const requiredBridgeTokens = [
+      "migrateLegacyLearningDataToDaemon",
+      "exportLegacyLearningDataForDaemon",
+      "importLearningData",
+    ]
+    failures.push(...requiredBridgeTokens
+      .filter(text => !bridgeService.includes(text))
+      .map(text => `learning bridge service is missing legacy migration token: ${text}`))
+
+    if (!messageProtocol.includes("migrateLegacyLearningDataToDaemon")) {
+      failures.push("message protocol is missing migrateLegacyLearningDataToDaemon")
+    }
 
     return failures
   }),

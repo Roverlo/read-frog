@@ -393,6 +393,8 @@ describe("learning daemon server", () => {
             dictId: "cet4",
           },
         ],
+        legacyReviewLogs: [],
+        legacyReviewSessions: [],
         entries: expect.arrayContaining([
           expect.objectContaining({
             normalizedText: "workflow",
@@ -450,6 +452,24 @@ describe("learning daemon server", () => {
             createdAt: "2026-06-01T00:02:00.000Z",
           },
         ],
+        legacyReviewLogs: [
+          {
+            id: "review-log-import",
+            itemId: "capture-import",
+            rating: "good",
+            reviewedAt: "2026-06-01T00:03:00.000Z",
+            createdAt: "2026-06-01T00:03:00.000Z",
+            updatedAt: "2026-06-01T00:03:00.000Z",
+          },
+        ],
+        legacyReviewSessions: [
+          {
+            id: "review-session-import",
+            itemIds: ["capture-import"],
+            createdAt: "2026-06-01T00:04:00.000Z",
+            updatedAt: "2026-06-01T00:04:00.000Z",
+          },
+        ],
         entries: [],
       },
     }
@@ -469,11 +489,15 @@ describe("learning daemon server", () => {
         qwertyWordRecords: 1,
         qwertyChapterRecords: 1,
         projectionEntries: 3,
+        legacyReviewLogs: 1,
+        legacyReviewSessions: 1,
       },
       skipped: {
         captures: 0,
         qwertyWordRecords: 0,
         qwertyChapterRecords: 0,
+        legacyReviewLogs: 0,
+        legacyReviewSessions: 0,
       },
     })
 
@@ -492,11 +516,15 @@ describe("learning daemon server", () => {
         qwertyWordRecords: 0,
         qwertyChapterRecords: 0,
         projectionEntries: 0,
+        legacyReviewLogs: 0,
+        legacyReviewSessions: 0,
       },
       skipped: {
         captures: 1,
         qwertyWordRecords: 1,
         qwertyChapterRecords: 1,
+        legacyReviewLogs: 1,
+        legacyReviewSessions: 1,
       },
     })
 

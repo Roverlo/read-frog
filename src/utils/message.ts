@@ -22,6 +22,7 @@ import type {
 import type {
   LearningBridgeCaptureResult,
   LearningBridgeFlushResult,
+  LearningBridgeLegacyMigrationResult,
   LearningBridgeProjectionSyncResult,
   LearningBridgeProjectionTermsResult,
   LearningBridgeQwertyChapterRecordResult,
@@ -87,6 +88,7 @@ interface ProtocolMap {
   syncLearningQwertyWordRecord: (data: LearningQwertyWordRecordRequest) => Promise<LearningBridgeQwertyWordRecordResult>
   syncLearningQwertyChapterRecord: (data: LearningQwertyChapterRecordRequest) => Promise<LearningBridgeQwertyChapterRecordResult>
   getLearningWorkspaceState: () => Promise<LearningBridgeWorkspaceStateResult>
+  migrateLegacyLearningDataToDaemon: () => Promise<LearningBridgeLegacyMigrationResult>
   flushLearningBridgeQueue: () => Promise<LearningBridgeFlushResult>
   getLearningProjectionTerms: (data: { terms: string[] }) => Promise<LearningBridgeProjectionTermsResult>
   syncLearningProjectionCache: () => Promise<LearningBridgeProjectionSyncResult>

@@ -17,6 +17,52 @@ const config: LearningBridgeConfig = {
   baseUrl: "http://127.0.0.1:7457",
 }
 
+vi.mock("@/utils/learning/legacy-migration", () => ({
+  exportLegacyLearningDataForDaemon: vi.fn(async () => ({
+    captures: [
+      {
+        id: "legacy:item:capture-1",
+        text: "repeatable workflow",
+        createdAt: "2026-06-01T00:00:00.000Z",
+        extractedItems: [],
+      },
+    ],
+    qwertyWordRecords: [
+      {
+        id: "legacy:qwerty:record-1",
+        word: "workflow",
+        input: "workflow",
+        correct: true,
+        accuracy: 1,
+        durationMs: 1200,
+        mistakes: [],
+        createdAt: "2026-06-01T00:01:00.000Z",
+      },
+    ],
+    qwertyChapterRecords: [],
+    entries: [
+      {
+        normalizedText: "workflow",
+        kind: "word",
+        status: "learning",
+        confidence: 0.35,
+        definition: "workflow definition",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      },
+    ],
+    legacyReviewLogs: [
+      {
+        id: "log-1",
+      },
+    ],
+    legacyReviewSessions: [
+      {
+        id: "session-1",
+      },
+    ],
+  })),
+}))
+
 function createHealth(overrides: Partial<LearningDaemonHealthResponse> = {}): LearningDaemonHealthResponse {
   return {
     ok: true,
@@ -105,6 +151,7 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
       recordQwertyChapter: vi.fn(),
+      importLearningData: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -130,6 +177,7 @@ describe("learning bridge background service", () => {
       }),
       recordQwertyWord: vi.fn(),
       recordQwertyChapter: vi.fn(),
+      importLearningData: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -178,6 +226,7 @@ describe("learning bridge background service", () => {
       }),
       recordQwertyWord: vi.fn(),
       recordQwertyChapter: vi.fn(),
+      importLearningData: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -211,6 +260,7 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
       recordQwertyChapter: vi.fn(),
+      importLearningData: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(async (terms: string[]) => ({
@@ -258,6 +308,7 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
       recordQwertyChapter: vi.fn(),
+      importLearningData: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -295,6 +346,7 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
       recordQwertyChapter: vi.fn(),
+      importLearningData: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -316,6 +368,7 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
       recordQwertyChapter: vi.fn(),
+      importLearningData: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(async () => ({
         ok: true as const,
@@ -365,6 +418,7 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
       recordQwertyChapter: vi.fn(),
+      importLearningData: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(async () => ({
         ok: true as const,
@@ -407,6 +461,7 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(async () => response),
       recordQwertyChapter: vi.fn(),
+      importLearningData: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -454,6 +509,7 @@ describe("learning bridge background service", () => {
         throw new Error("daemon offline")
       }),
       recordQwertyChapter: vi.fn(),
+      importLearningData: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -495,6 +551,7 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
       recordQwertyChapter: vi.fn(),
+      importLearningData: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -529,6 +586,7 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
       recordQwertyChapter: vi.fn(async () => response),
+      importLearningData: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -572,6 +630,7 @@ describe("learning bridge background service", () => {
       recordQwertyChapter: vi.fn(async () => {
         throw new Error("daemon offline")
       }),
+      importLearningData: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -614,6 +673,7 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
       recordQwertyChapter: vi.fn(),
+      importLearningData: vi.fn(),
       getWorkspaceState: vi.fn(),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -669,6 +729,7 @@ describe("learning bridge background service", () => {
       captureSelection: vi.fn(),
       recordQwertyWord: vi.fn(),
       recordQwertyChapter: vi.fn(),
+      importLearningData: vi.fn(),
       getWorkspaceState: vi.fn(async () => state),
       getProjection: vi.fn(),
       getProjectionTerms: vi.fn(),
@@ -682,5 +743,89 @@ describe("learning bridge background service", () => {
       state,
     })
     expect(client.getWorkspaceState).toHaveBeenCalledWith(config)
+  })
+
+  it("imports legacy extension learning data through the daemon bridge", async () => {
+    const { migrateLegacyLearningDataToDaemon } = await import("../background-service")
+    const { store } = createStore()
+    const response = {
+      ok: true as const,
+      changed: true,
+      projectionVersion: "projection-8",
+      eventId: "event-8",
+      imported: {
+        captures: 1,
+        qwertyWordRecords: 1,
+        qwertyChapterRecords: 0,
+        projectionEntries: 1,
+        legacyReviewLogs: 1,
+        legacyReviewSessions: 1,
+      },
+      skipped: {
+        captures: 0,
+        qwertyWordRecords: 0,
+        qwertyChapterRecords: 0,
+        projectionEntries: 0,
+        legacyReviewLogs: 0,
+        legacyReviewSessions: 0,
+      },
+    }
+    const client = {
+      getHealth: vi.fn(async () => createHealth()),
+      captureSelection: vi.fn(),
+      recordQwertyWord: vi.fn(),
+      recordQwertyChapter: vi.fn(),
+      importLearningData: vi.fn(async () => response),
+      getWorkspaceState: vi.fn(),
+      getProjection: vi.fn(),
+      getProjectionTerms: vi.fn(),
+    }
+
+    await expect(migrateLegacyLearningDataToDaemon({
+      store,
+      client,
+    })).resolves.toEqual({
+      status: "imported",
+      itemCount: 1,
+      captureCount: 1,
+      qwertyWordRecordCount: 1,
+      qwertyChapterRecordCount: 0,
+      legacyReviewLogCount: 1,
+      legacyReviewSessionCount: 1,
+      projectionEntryCount: 1,
+      response,
+    })
+    expect(client.importLearningData).toHaveBeenCalledWith(expect.objectContaining({
+      captures: expect.arrayContaining([expect.objectContaining({ id: "legacy:item:capture-1" })]),
+      qwertyWordRecords: expect.arrayContaining([expect.objectContaining({ id: "legacy:qwerty:record-1" })]),
+      legacyReviewLogs: [{ id: "log-1" }],
+    }), config)
+  })
+
+  it("does not import legacy data when the bridge is disabled", async () => {
+    const { migrateLegacyLearningDataToDaemon } = await import("../background-service")
+    const { store } = createStore()
+    vi.mocked(store.getConfig).mockResolvedValue({
+      ...config,
+      enabled: false,
+    })
+    const client = {
+      getHealth: vi.fn(),
+      captureSelection: vi.fn(),
+      recordQwertyWord: vi.fn(),
+      recordQwertyChapter: vi.fn(),
+      importLearningData: vi.fn(),
+      getWorkspaceState: vi.fn(),
+      getProjection: vi.fn(),
+      getProjectionTerms: vi.fn(),
+    }
+
+    await expect(migrateLegacyLearningDataToDaemon({
+      store,
+      client,
+    })).resolves.toEqual({
+      status: "disabled",
+    })
+    expect(client.importLearningData).not.toHaveBeenCalled()
   })
 })

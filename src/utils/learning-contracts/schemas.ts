@@ -269,6 +269,8 @@ export const learningDaemonPortableStateSchema = z.object({
   qwertyWordRecords: z.array(learningQwertyWordRecordRequestSchema).default([]),
   qwertyChapterRecords: z.array(learningQwertyChapterRecordRequestSchema).default([]),
   entries: z.array(masteryProjectionEntrySchema).default([]),
+  legacyReviewLogs: z.array(z.record(z.string(), z.unknown())).default([]),
+  legacyReviewSessions: z.array(z.record(z.string(), z.unknown())).default([]),
 })
 
 export const learningDaemonImportSummarySchema = z.object({
@@ -276,6 +278,8 @@ export const learningDaemonImportSummarySchema = z.object({
   qwertyWordRecords: z.number().int().nonnegative(),
   qwertyChapterRecords: z.number().int().nonnegative(),
   projectionEntries: z.number().int().nonnegative(),
+  legacyReviewLogs: z.number().int().nonnegative(),
+  legacyReviewSessions: z.number().int().nonnegative(),
 })
 
 export const learningDaemonExportResponseSchema = z.object({

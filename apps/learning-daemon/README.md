@@ -59,9 +59,11 @@ After three consecutive high-accuracy correct records for the same word, the pro
 
 `GET /api/v1/workspace/state` returns daemon-owned workspace summaries: recent extension captures, recent qwerty word records, and mastery distribution stats. The workspace UI uses this endpoint instead of reconstructing state from the projection table.
 
-`GET /api/v1/export` returns a portable `read-frog-learning-daemon-v1` payload containing captures, qwerty word records, qwerty chapter records, and mastery projection entries. This is the backup and extension-migration boundary while the workspace is split out of the browser extension.
+`GET /api/v1/export` returns a portable `read-frog-learning-daemon-v1` payload containing captures, qwerty word records, qwerty chapter records, mastery projection entries, and legacy review records. This is the backup and extension-migration boundary while the workspace is split out of the browser extension.
 
 `POST /api/v1/import` accepts either the full export payload or the nested portable state. Imports are idempotent: captures merge by `id`, qwerty records merge by stable record IDs when present, and projection entries merge by `kind + normalizedText` with newer timestamps winning. Re-importing the same payload should not duplicate records.
+
+The extension-side `migrateLegacyLearningDataToDaemon` bridge reads old Dexie `learningItems`, `qwertyTypingRecords`, `learningReviewLogs`, and `reviewSessions`, converts them into this portable payload, and posts it to `POST /api/v1/import`. Legacy review records are preserved as portable records until the daemon store graduates from JSON to canonical review/session tables.
 
 `GET /api/v1/events` is an SSE stream. The daemon emits `projection.updated` after selection captures and qwerty word records, and `qwerty.session.finished` after chapter records. The workspace subscribes to these events and refreshes itself after container-side or extension-side learning data changes.
 

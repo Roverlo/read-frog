@@ -6,6 +6,7 @@ import type {
   LearningBridgeProjectionTermsResult,
   LearningBridgeQwertyChapterRecordResult,
   LearningBridgeQwertyWordRecordResult,
+  LearningBridgeLegacyMigrationResult,
   LearningBridgeStatus,
   LearningBridgeWorkspaceStateResult,
   LearningCaptureQueueStore,
@@ -14,6 +15,8 @@ import type {
   LearningCaptureSelectionInput,
   LearningCaptureSelectionRequest,
   LearningDaemonHealthResponse,
+  LearningDaemonImportResponse,
+  LearningDaemonPortableState,
   LearningQwertyChapterRecordRequest,
   LearningQwertyChapterRecordResponse,
   LearningQwertyWordRecordRequest,
@@ -31,6 +34,7 @@ import {
   getLearningMasteryProjection,
   getLearningMasteryProjectionTerms,
   getLearningWorkspaceState,
+  postLearningDaemonImport,
   postLearningCaptureSelection,
   postLearningQwertyChapterRecord,
   postLearningQwertyWordRecord,
@@ -55,6 +59,7 @@ export interface LearningDaemonBridgeClient {
   captureSelection: (capture: LearningCaptureSelectionRequest, config: LearningBridgeConfig) => Promise<unknown>
   recordQwertyWord: (record: LearningQwertyWordRecordRequest, config: LearningBridgeConfig) => Promise<LearningQwertyWordRecordResponse>
   recordQwertyChapter: (record: LearningQwertyChapterRecordRequest, config: LearningBridgeConfig) => Promise<LearningQwertyChapterRecordResponse>
+  importLearningData: (data: LearningDaemonPortableState, config: LearningBridgeConfig) => Promise<LearningDaemonImportResponse>
   getWorkspaceState: (config: LearningBridgeConfig) => Promise<LearningWorkspaceStateResponse>
   getProjection: (config: LearningBridgeConfig) => Promise<MasteryProjectionResponse>
   getProjectionTerms: (terms: string[], config: LearningBridgeConfig) => Promise<MasteryProjectionResponse>
@@ -99,6 +104,10 @@ function getDefaultClient(): LearningDaemonBridgeClient {
       token: config.token,
     }),
     recordQwertyChapter: (record, config) => postLearningQwertyChapterRecord(record, {
+      baseUrl: config.baseUrl,
+      token: config.token,
+    }),
+    importLearningData: (data, config) => postLearningDaemonImport(data, {
       baseUrl: config.baseUrl,
       token: config.token,
     }),
@@ -596,6 +605,50 @@ export async function syncLearningQwertyChapterRecord(
       flushedCaptureCount: flushResult.flushedCaptureCount,
       flushedQwertyWordRecordCount: flushResult.flushedQwertyWordRecordCount,
       flushedQwertyChapterRecordCount: flushResult.flushedQwertyChapterRecordCount,
+      error: getErrorMessage(error),
+    }
+  }
+}
+
+export async function migrateLegacyLearningDataToDaemon(
+  deps: LearningBridgeServiceDeps = {},
+): Promise<LearningBridgeLegacyMigrationResult> {
+  const { store, client } = getDeps(deps)
+  const config = await store.getConfig()
+
+  if (!config.enabled) {
+    return {
+      status: "disabled",
+    }
+  }
+
+  try {
+    const health = await client.getHealth(config)
+    if (getHealthState(health) !== "connected") {
+      return {
+        status: "incompatible",
+        error: `Expected contract ${LEARNING_CONTRACT_VERSION}, got ${health.contractVersion}`,
+      }
+    }
+
+    const { exportLegacyLearningDataForDaemon } = await import("@/utils/learning/legacy-migration")
+    const data = await exportLegacyLearningDataForDaemon()
+    const response = await client.importLearningData(data, config)
+    return {
+      status: "imported",
+      itemCount: data.entries.length,
+      captureCount: data.captures.length,
+      qwertyWordRecordCount: data.qwertyWordRecords.length,
+      qwertyChapterRecordCount: data.qwertyChapterRecords.length,
+      legacyReviewLogCount: data.legacyReviewLogs.length,
+      legacyReviewSessionCount: data.legacyReviewSessions.length,
+      projectionEntryCount: data.entries.length,
+      response,
+    }
+  }
+  catch (error) {
+    return {
+      status: "offline",
       error: getErrorMessage(error),
     }
   }

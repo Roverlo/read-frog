@@ -1,6 +1,7 @@
 import type {
   LearningCaptureSelectionRequest,
   LearningDaemonHealthResponse,
+  LearningDaemonImportResponse,
   LearningQwertyChapterRecordRequest,
   LearningQwertyChapterRecordResponse,
   LearningQwertyWordRecordRequest,
@@ -91,6 +92,19 @@ export interface LearningBridgeQwertyChapterRecordResult {
 export interface LearningBridgeWorkspaceStateResult {
   status: "ok" | "offline" | "disabled" | "incompatible"
   state?: LearningWorkspaceStateResponse
+  error?: string
+}
+
+export interface LearningBridgeLegacyMigrationResult {
+  status: "imported" | "disabled" | "incompatible" | "offline"
+  itemCount?: number
+  captureCount?: number
+  qwertyWordRecordCount?: number
+  qwertyChapterRecordCount?: number
+  legacyReviewLogCount?: number
+  legacyReviewSessionCount?: number
+  projectionEntryCount?: number
+  response?: LearningDaemonImportResponse
   error?: string
 }
 

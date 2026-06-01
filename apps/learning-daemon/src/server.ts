@@ -239,6 +239,8 @@ async function handleExport(store: LearningDaemonStore, response: ServerResponse
       qwertyWordRecords: state.qwertyWordRecords,
       qwertyChapterRecords: state.qwertyChapterRecords,
       entries: state.entries,
+      legacyReviewLogs: state.legacyReviewLogs,
+      legacyReviewSessions: state.legacyReviewSessions,
     },
   })
   sendJson(response, 200, body)

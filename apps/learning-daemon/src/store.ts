@@ -20,6 +20,8 @@ export interface LearningDaemonStoreState {
   qwertyWordRecords: LearningQwertyWordRecordRequest[]
   qwertyChapterRecords: LearningQwertyChapterRecordRequest[]
   entries: MasteryProjectionEntry[]
+  legacyReviewLogs: Array<Record<string, unknown>>
+  legacyReviewSessions: Array<Record<string, unknown>>
 }
 
 export interface CaptureSelectionResult {
@@ -77,6 +79,8 @@ function createInitialState(): LearningDaemonStoreState {
     qwertyWordRecords: [],
     qwertyChapterRecords: [],
     entries: [],
+    legacyReviewLogs: [],
+    legacyReviewSessions: [],
   }
 }
 
@@ -163,6 +167,20 @@ function getQwertyChapterRecordKey(record: LearningQwertyChapterRecordRequest) {
     record.correctCount,
     record.wrongCount,
   ].join("\u0000")
+}
+
+function getLegacyRecordKey(record: Record<string, unknown>) {
+  const id = record.id
+  if (typeof id === "string" && id.trim()) {
+    return `id:${id}`
+  }
+  return JSON.stringify(record)
+}
+
+function getLegacyRecordTimestamp(record: Record<string, unknown>) {
+  return typeof record.updatedAt === "string"
+    ? record.updatedAt
+    : typeof record.createdAt === "string" ? record.createdAt : undefined
 }
 
 function mergeByKey<T>(
@@ -660,6 +678,16 @@ export function createFileLearningDaemonStore(dataDir: string): LearningDaemonSt
           getTimestamp: record => record.createdAt,
           sortTimestamp: record => record.createdAt,
         })
+        const legacyReviewLogs = mergeByKey(state.legacyReviewLogs, data.legacyReviewLogs, {
+          getKey: getLegacyRecordKey,
+          getTimestamp: getLegacyRecordTimestamp,
+          sortTimestamp: getLegacyRecordTimestamp,
+        })
+        const legacyReviewSessions = mergeByKey(state.legacyReviewSessions, data.legacyReviewSessions, {
+          getKey: getLegacyRecordKey,
+          getTimestamp: getLegacyRecordTimestamp,
+          sortTimestamp: getLegacyRecordTimestamp,
+        })
         const explicitEntries = mergeProjectionEntries(state.entries, data.entries)
         const derivedEntries = createDerivedProjectionEntries({
           captures: captures.items,
@@ -670,6 +698,8 @@ export function createFileLearningDaemonStore(dataDir: string): LearningDaemonSt
         const changed = captures.imported > 0
           || qwertyWordRecords.imported > 0
           || qwertyChapterRecords.imported > 0
+          || legacyReviewLogs.imported > 0
+          || legacyReviewSessions.imported > 0
           || changedTerms.length > 0
         const sequence = changed ? state.sequence + 1 : state.sequence
         const projectionVersion = changed ? `projection-${sequence}` : state.projectionVersion
@@ -685,6 +715,8 @@ export function createFileLearningDaemonStore(dataDir: string): LearningDaemonSt
                 captures: captures.items,
                 qwertyWordRecords: qwertyWordRecords.items,
                 qwertyChapterRecords: qwertyChapterRecords.items,
+                legacyReviewLogs: legacyReviewLogs.items,
+                legacyReviewSessions: legacyReviewSessions.items,
                 entries: finalEntries.items,
               }
             : state,
@@ -698,12 +730,16 @@ export function createFileLearningDaemonStore(dataDir: string): LearningDaemonSt
               qwertyWordRecords: qwertyWordRecords.imported,
               qwertyChapterRecords: qwertyChapterRecords.imported,
               projectionEntries: changedTerms.length,
+              legacyReviewLogs: legacyReviewLogs.imported,
+              legacyReviewSessions: legacyReviewSessions.imported,
             },
             skipped: {
               captures: captures.skipped,
               qwertyWordRecords: qwertyWordRecords.skipped,
               qwertyChapterRecords: qwertyChapterRecords.skipped,
               projectionEntries: explicitEntries.skipped,
+              legacyReviewLogs: legacyReviewLogs.skipped,
+              legacyReviewSessions: legacyReviewSessions.skipped,
             },
           },
         }

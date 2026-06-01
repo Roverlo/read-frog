@@ -5,6 +5,7 @@ const getLearningBridgeStatusMock = vi.fn()
 const syncLearningCaptureSelectionMock = vi.fn()
 const syncLearningQwertyWordRecordMock = vi.fn()
 const syncLearningQwertyChapterRecordMock = vi.fn()
+const migrateLegacyLearningDataToDaemonMock = vi.fn()
 const flushLearningBridgeQueueMock = vi.fn()
 const getLearningProjectionTermsMock = vi.fn()
 const getLearningWorkspaceStateFromDaemonMock = vi.fn()
@@ -41,6 +42,7 @@ vi.mock("@/utils/learning-bridge", () => ({
   syncLearningCaptureSelection: syncLearningCaptureSelectionMock,
   syncLearningQwertyWordRecord: syncLearningQwertyWordRecordMock,
   syncLearningQwertyChapterRecord: syncLearningQwertyChapterRecordMock,
+  migrateLegacyLearningDataToDaemon: migrateLegacyLearningDataToDaemonMock,
   flushLearningBridgeQueue: flushLearningBridgeQueueMock,
   getLearningProjectionTerms: getLearningProjectionTermsMock,
   getLearningWorkspaceStateFromDaemon: getLearningWorkspaceStateFromDaemonMock,
@@ -81,6 +83,7 @@ describe("background learning bridge", () => {
     syncLearningCaptureSelectionMock.mockResolvedValue({ status: "queued" })
     syncLearningQwertyWordRecordMock.mockResolvedValue({ status: "synced" })
     syncLearningQwertyChapterRecordMock.mockResolvedValue({ status: "synced" })
+    migrateLegacyLearningDataToDaemonMock.mockResolvedValue({ status: "imported" })
     flushLearningBridgeQueueMock.mockResolvedValue({
       status: "flushed",
       pendingCaptureCount: 0,
@@ -120,11 +123,13 @@ describe("background learning bridge", () => {
       status: "ok",
       state: { ok: true },
     })
+    await expect(getRegisteredMessageHandler("migrateLegacyLearningDataToDaemon")({ data: {} })).resolves.toEqual({ status: "imported" })
     await expect(getRegisteredMessageHandler("syncLearningProjectionCache")({ data: {} })).resolves.toEqual({ status: "synced", entryCount: 1, changed: false })
 
     expect(syncLearningCaptureSelectionMock).toHaveBeenCalledWith({ text: "workflow" })
     expect(syncLearningQwertyWordRecordMock).toHaveBeenCalledWith({ word: "workflow" })
     expect(syncLearningQwertyChapterRecordMock).toHaveBeenCalledWith({ dictId: "cet4", chapterIndex: 0 })
+    expect(migrateLegacyLearningDataToDaemonMock).toHaveBeenCalledOnce()
     expect(getLearningProjectionTermsMock).toHaveBeenCalledWith(["workflow"])
     expect(getLearningWorkspaceStateFromDaemonMock).toHaveBeenCalledOnce()
   })
@@ -294,6 +299,36 @@ describe("background learning bridge", () => {
       flushedCaptureCount: 2,
       flushedQwertyWordRecordCount: 0,
       flushedQwertyChapterRecordCount: 0,
+    })
+
+    expect(syncLearningProjectionCacheMock).toHaveBeenCalledOnce()
+    expect(sendMessageMock).toHaveBeenCalledWith("refreshLearningPageTranslation", undefined, 42)
+  })
+
+  it("syncs projection and refreshes translated tabs after legacy migration imports data", async () => {
+    migrateLegacyLearningDataToDaemonMock.mockResolvedValue({
+      status: "imported",
+      captureCount: 1,
+      qwertyWordRecordCount: 1,
+    })
+    syncLearningProjectionCacheMock.mockResolvedValue({
+      status: "synced",
+      entryCount: 5,
+      changed: true,
+    })
+    getPageTranslationEnabledMock.mockResolvedValue(true)
+    tabsQueryMock.mockResolvedValue([{ id: 42 }])
+    sendMessageMock.mockResolvedValue(undefined)
+
+    const { setupLearningBridgeMessageHandlers } = await import("../learning-bridge")
+    setupLearningBridgeMessageHandlers({
+      query: tabsQueryMock,
+    } as never)
+
+    await expect(getRegisteredMessageHandler("migrateLegacyLearningDataToDaemon")({ data: {} })).resolves.toEqual({
+      status: "imported",
+      captureCount: 1,
+      qwertyWordRecordCount: 1,
     })
 
     expect(syncLearningProjectionCacheMock).toHaveBeenCalledOnce()

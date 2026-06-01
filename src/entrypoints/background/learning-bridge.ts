@@ -4,6 +4,7 @@ import {
   getLearningBridgeStatus,
   getLearningProjectionTerms,
   getLearningWorkspaceStateFromDaemon,
+  migrateLegacyLearningDataToDaemon,
   syncLearningCaptureSelection,
   syncLearningQwertyChapterRecord,
   syncLearningProjectionCache,
@@ -91,6 +92,14 @@ export function setupLearningBridgeMessageHandlers(
 
   onMessage("getLearningWorkspaceState", async () => {
     return await getLearningWorkspaceStateFromDaemon()
+  })
+
+  onMessage("migrateLegacyLearningDataToDaemon", async () => {
+    const result = await migrateLegacyLearningDataToDaemon()
+    if (result.status === "imported") {
+      await refreshLearningProjectionCacheAfterWrite(tabsApi)
+    }
+    return result
   })
 
   onMessage("flushLearningBridgeQueue", async () => {

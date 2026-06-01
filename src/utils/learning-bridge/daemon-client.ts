@@ -3,6 +3,8 @@ import type {
   LearningCaptureSelectionRequest,
   LearningCaptureSelectionResponse,
   LearningDaemonHealthResponse,
+  LearningDaemonImportResponse,
+  LearningDaemonPortableState,
   LearningQwertyChapterRecordRequest,
   LearningQwertyChapterRecordResponse,
   LearningQwertyDictionariesResponse,
@@ -15,6 +17,7 @@ import type {
 import {
   learningCaptureSelectionResponseSchema,
   learningDaemonHealthResponseSchema,
+  learningDaemonImportResponseSchema,
   learningQwertyChapterRecordResponseSchema,
   learningQwertyDictionariesResponseSchema,
   learningQwertyDictionaryChapterResponseSchema,
@@ -104,6 +107,20 @@ export async function postLearningCaptureSelection(
     ...options,
     method: "POST",
     body: request,
+  })
+}
+
+export async function postLearningDaemonImport(
+  request: LearningDaemonPortableState,
+  options: LearningDaemonClientOptions,
+): Promise<LearningDaemonImportResponse> {
+  return requestJson("/api/v1/import", learningDaemonImportResponseSchema, {
+    ...options,
+    method: "POST",
+    body: {
+      format: "read-frog-learning-daemon-v1",
+      state: request,
+    },
   })
 }
 
