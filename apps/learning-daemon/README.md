@@ -40,6 +40,8 @@ Useful environment variables:
 - `GET /api/v1/health`
 - `GET /api/v1/events`
 - `GET /api/v1/workspace/state`
+- `GET /api/v1/export`
+- `POST /api/v1/import`
 - `GET /api/v1/projection`
 - `GET /api/v1/projection/terms?terms=workflow,ability`
 - `GET /api/v1/qwerty/dictionaries`
@@ -56,6 +58,10 @@ After three consecutive high-accuracy correct records for the same word, the pro
 `POST /api/v1/qwerty/records/chapter` records chapter-level practice results: dictionary, chapter index, duration, word count, correct/wrong counts, accuracy, and correct word indexes. This mirrors qwerty-learner's chapter analytics without requiring the extension to own those records.
 
 `GET /api/v1/workspace/state` returns daemon-owned workspace summaries: recent extension captures, recent qwerty word records, and mastery distribution stats. The workspace UI uses this endpoint instead of reconstructing state from the projection table.
+
+`GET /api/v1/export` returns a portable `read-frog-learning-daemon-v1` payload containing captures, qwerty word records, qwerty chapter records, and mastery projection entries. This is the backup and extension-migration boundary while the workspace is split out of the browser extension.
+
+`POST /api/v1/import` accepts either the full export payload or the nested portable state. Imports are idempotent: captures merge by `id`, qwerty records merge by stable record IDs when present, and projection entries merge by `kind + normalizedText` with newer timestamps winning. Re-importing the same payload should not duplicate records.
 
 `GET /api/v1/events` is an SSE stream. The daemon emits `projection.updated` after selection captures and qwerty word records, and `qwerty.session.finished` after chapter records. The workspace subscribes to these events and refreshes itself after container-side or extension-side learning data changes.
 

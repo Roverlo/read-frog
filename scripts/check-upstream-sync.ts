@@ -189,6 +189,54 @@ const checks = [
     return failures
   }),
 
+  check("learning daemon keeps a portable import export migration boundary", () => {
+    const contracts = readRepoFile("src/utils/learning-contracts/schemas.ts")
+    const server = readRepoFile("apps/learning-daemon/src/server.ts")
+    const store = readRepoFile("apps/learning-daemon/src/store.ts")
+    const readme = readRepoFile("apps/learning-daemon/README.md")
+    const failures: string[] = []
+
+    const requiredContractTokens = [
+      "learningDaemonExportResponseSchema",
+      "learningDaemonImportRequestSchema",
+      "read-frog-learning-daemon-v1",
+    ]
+    failures.push(...requiredContractTokens
+      .filter(text => !contracts.includes(text))
+      .map(text => `learning contracts are missing portable migration token: ${text}`))
+
+    const requiredServerTokens = [
+      'path === "/api/v1/export"',
+      'path === "/api/v1/import"',
+      "handleExport",
+      "handleImport",
+    ]
+    failures.push(...requiredServerTokens
+      .filter(text => !server.includes(text))
+      .map(text => `learning daemon server is missing import/export token: ${text}`))
+
+    const requiredStoreTokens = [
+      "importLearningData",
+      "getQwertyWordRecordKey",
+      "getQwertyChapterRecordKey",
+      "createDerivedProjectionEntries",
+    ]
+    failures.push(...requiredStoreTokens
+      .filter(text => !store.includes(text))
+      .map(text => `learning daemon store is missing idempotent import token: ${text}`))
+
+    const requiredReadmeTokens = [
+      "GET /api/v1/export",
+      "POST /api/v1/import",
+      "Imports are idempotent",
+    ]
+    failures.push(...requiredReadmeTokens
+      .filter(text => !readme.includes(text))
+      .map(text => `learning daemon README is missing import/export docs: ${text}`))
+
+    return failures
+  }),
+
   check("selection captures stay behind the extension-to-daemon bridge", () => {
     const source = readRepoFile("src/entrypoints/selection.content/selection-toolbar/save-learning-button/index.tsx")
     const failures: string[] = []

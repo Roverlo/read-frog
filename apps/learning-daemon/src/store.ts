@@ -1,5 +1,7 @@
 import type {
   LearningCaptureSelectionRequest,
+  LearningDaemonImportSummary,
+  LearningDaemonPortableState,
   LearningQwertyChapterRecordRequest,
   LearningQwertyWordRecordRequest,
   LearningWorkspaceQwertyMistakesSummary,
@@ -41,12 +43,22 @@ export interface RecordQwertyChapterResult {
   eventId: string
 }
 
+export interface ImportLearningDataResult {
+  changed: boolean
+  projectionVersion: string
+  eventId?: string
+  changedTerms: string[]
+  imported: LearningDaemonImportSummary
+  skipped: LearningDaemonImportSummary
+}
+
 export interface LearningDaemonStore {
   getState: () => Promise<LearningDaemonStoreState>
   getWorkspaceState: () => Promise<LearningWorkspaceStateResponse>
   captureSelection: (capture: LearningCaptureSelectionRequest) => Promise<CaptureSelectionResult>
   recordQwertyWord: (record: LearningQwertyWordRecordRequest) => Promise<RecordQwertyWordResult>
   recordQwertyChapter: (record: LearningQwertyChapterRecordRequest) => Promise<RecordQwertyChapterResult>
+  importLearningData: (data: LearningDaemonPortableState) => Promise<ImportLearningDataResult>
 }
 
 export function normalizeLearningDaemonText(text: string) {
@@ -105,6 +117,124 @@ function upsertProjectionEntry(
   return next.sort((a, b) => a.normalizedText.localeCompare(b.normalizedText))
 }
 
+function getProjectionEntryKey(entry: Pick<MasteryProjectionEntry, "kind" | "normalizedText">) {
+  return `${entry.kind}\u0000${entry.normalizedText}`
+}
+
+function isIncomingTimestampNewer(existingTimestamp: string | undefined, incomingTimestamp: string | undefined) {
+  if (!existingTimestamp) {
+    return Boolean(incomingTimestamp)
+  }
+  if (!incomingTimestamp) {
+    return false
+  }
+  return incomingTimestamp > existingTimestamp
+}
+
+function getQwertyWordRecordKey(record: LearningQwertyWordRecordRequest) {
+  if (record.id) {
+    return `id:${record.id}`
+  }
+
+  return [
+    "word",
+    normalizeLearningDaemonText(record.word),
+    record.createdAt ?? "",
+    record.dictId ?? "",
+    record.chapterIndex ?? "",
+    record.wordIndex ?? "",
+    record.input,
+    record.durationMs,
+  ].join("\u0000")
+}
+
+function getQwertyChapterRecordKey(record: LearningQwertyChapterRecordRequest) {
+  if (record.id) {
+    return `id:${record.id}`
+  }
+
+  return [
+    "chapter",
+    record.dictId,
+    record.chapterIndex,
+    record.createdAt ?? "",
+    record.durationMs,
+    record.wordCount,
+    record.correctCount,
+    record.wrongCount,
+  ].join("\u0000")
+}
+
+function mergeByKey<T>(
+  existingItems: T[],
+  incomingItems: T[],
+  options: {
+    getKey: (item: T) => string
+    getTimestamp?: (item: T) => string | undefined
+    sortTimestamp?: (item: T) => string | undefined
+  },
+) {
+  const byKey = new Map(existingItems.map(item => [options.getKey(item), item]))
+  let imported = 0
+  let skipped = 0
+
+  for (const incoming of incomingItems) {
+    const key = options.getKey(incoming)
+    const existing = byKey.get(key)
+    if (!existing) {
+      byKey.set(key, incoming)
+      imported += 1
+      continue
+    }
+
+    if (
+      options.getTimestamp
+      && isIncomingTimestampNewer(options.getTimestamp(existing), options.getTimestamp(incoming))
+    ) {
+      byKey.set(key, incoming)
+      imported += 1
+      continue
+    }
+
+    skipped += 1
+  }
+
+  const items = [...byKey.values()]
+  if (options.sortTimestamp) {
+    items.sort((a, b) => {
+      const aTimestamp = options.sortTimestamp?.(a) ?? ""
+      const bTimestamp = options.sortTimestamp?.(b) ?? ""
+      return aTimestamp.localeCompare(bTimestamp)
+    })
+  }
+
+  return { items, imported, skipped }
+}
+
+function mergeProjectionEntries(
+  existingItems: MasteryProjectionEntry[],
+  incomingItems: MasteryProjectionEntry[],
+) {
+  return mergeByKey(existingItems, incomingItems, {
+    getKey: getProjectionEntryKey,
+    getTimestamp: entry => entry.updatedAt,
+    sortTimestamp: entry => entry.normalizedText,
+  })
+}
+
+function getChangedProjectionTerms(
+  existingEntries: MasteryProjectionEntry[],
+  nextEntries: MasteryProjectionEntry[],
+) {
+  const existingByKey = new Map(
+    existingEntries.map(entry => [getProjectionEntryKey(entry), JSON.stringify(entry)]),
+  )
+  return nextEntries
+    .filter(entry => existingByKey.get(getProjectionEntryKey(entry)) !== JSON.stringify(entry))
+    .map(entry => entry.normalizedText)
+    .sort((a, b) => a.localeCompare(b))
+}
+
 function createProjectionEntry(input: {
   text: string
   kind: MasteryProjectionEntry["kind"]
@@ -149,6 +279,38 @@ function projectionEntriesFromCapture(capture: LearningCaptureSelectionRequest):
     })
     if (entry) {
       entries.push(entry)
+    }
+  }
+
+  return entries
+}
+
+function createDerivedProjectionEntries(input: {
+  captures: LearningCaptureSelectionRequest[]
+  qwertyWordRecords: LearningQwertyWordRecordRequest[]
+}) {
+  let entries: MasteryProjectionEntry[] = []
+  const captures = [...input.captures].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  for (const capture of captures) {
+    entries = projectionEntriesFromCapture(capture).reduce(
+      (currentEntries, entry) => upsertProjectionEntry(currentEntries, entry),
+      entries,
+    )
+  }
+
+  const qwertyRecords = [...input.qwertyWordRecords].sort((a, b) =>
+    (a.createdAt ?? "").localeCompare(b.createdAt ?? ""),
+  )
+  const recordsForStreak: LearningQwertyWordRecordRequest[] = []
+  for (const record of qwertyRecords) {
+    recordsForStreak.push(record)
+    const previousEntry = entries.find(existing =>
+      existing.kind === "word"
+      && existing.normalizedText === normalizeLearningDaemonText(record.word),
+    )
+    const entry = createProjectionEntryFromQwertyRecord(record, previousEntry, recordsForStreak)
+    if (entry) {
+      entries = upsertProjectionEntry(entries, entry)
     }
   }
 
@@ -477,6 +639,73 @@ export function createFileLearningDaemonStore(dataDir: string): LearningDaemonSt
             qwertyChapterRecords: [...state.qwertyChapterRecords, recordWithCreatedAt],
           },
           result: { recordId, projectionVersion, eventId },
+        }
+      })
+    },
+
+    async importLearningData(data) {
+      return await enqueueMutation((state) => {
+        const captures = mergeByKey(state.captures, data.captures, {
+          getKey: capture => capture.id,
+          getTimestamp: capture => capture.createdAt,
+          sortTimestamp: capture => capture.createdAt,
+        })
+        const qwertyWordRecords = mergeByKey(state.qwertyWordRecords, data.qwertyWordRecords, {
+          getKey: getQwertyWordRecordKey,
+          getTimestamp: record => record.createdAt,
+          sortTimestamp: record => record.createdAt,
+        })
+        const qwertyChapterRecords = mergeByKey(state.qwertyChapterRecords, data.qwertyChapterRecords, {
+          getKey: getQwertyChapterRecordKey,
+          getTimestamp: record => record.createdAt,
+          sortTimestamp: record => record.createdAt,
+        })
+        const explicitEntries = mergeProjectionEntries(state.entries, data.entries)
+        const derivedEntries = createDerivedProjectionEntries({
+          captures: captures.items,
+          qwertyWordRecords: qwertyWordRecords.items,
+        })
+        const finalEntries = mergeProjectionEntries(derivedEntries, explicitEntries.items)
+        const changedTerms = getChangedProjectionTerms(state.entries, finalEntries.items)
+        const changed = captures.imported > 0
+          || qwertyWordRecords.imported > 0
+          || qwertyChapterRecords.imported > 0
+          || changedTerms.length > 0
+        const sequence = changed ? state.sequence + 1 : state.sequence
+        const projectionVersion = changed ? `projection-${sequence}` : state.projectionVersion
+        const eventId = changed ? `event-${sequence}` : state.eventId
+
+        return {
+          nextState: changed
+            ? {
+                ...state,
+                sequence,
+                projectionVersion,
+                eventId,
+                captures: captures.items,
+                qwertyWordRecords: qwertyWordRecords.items,
+                qwertyChapterRecords: qwertyChapterRecords.items,
+                entries: finalEntries.items,
+              }
+            : state,
+          result: {
+            changed,
+            projectionVersion,
+            eventId,
+            changedTerms,
+            imported: {
+              captures: captures.imported,
+              qwertyWordRecords: qwertyWordRecords.imported,
+              qwertyChapterRecords: qwertyChapterRecords.imported,
+              projectionEntries: changedTerms.length,
+            },
+            skipped: {
+              captures: captures.skipped,
+              qwertyWordRecords: qwertyWordRecords.skipped,
+              qwertyChapterRecords: qwertyChapterRecords.skipped,
+              projectionEntries: explicitEntries.skipped,
+            },
+          },
         }
       })
     },

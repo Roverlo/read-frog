@@ -303,6 +303,300 @@ describe("learning daemon server", () => {
     })
   })
 
+  it("exports daemon-owned learning data for backup and extension migration", async () => {
+    await fetch(`${baseUrl}/api/v1/capture/selection`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: new Blob([JSON.stringify({
+        id: "capture-export",
+        text: "repeatable workflow",
+        context: "A repeatable workflow helps teams improve.",
+        sourceTitle: "Workflow notes",
+        sourceUrl: "https://example.test/workflow",
+        createdAt: "2026-06-01T00:00:00.000Z",
+        extractedItems: [
+          {
+            text: "workflow",
+            kind: "word",
+            explanation: { meaningZh: "workflow definition" },
+          },
+        ],
+      })]),
+    })
+    await fetch(`${baseUrl}/api/v1/qwerty/records/word`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: new Blob([JSON.stringify({
+        id: "record-export",
+        word: "workflow",
+        input: "workflow",
+        correct: true,
+        accuracy: 1,
+        durationMs: 1200,
+        dictId: "cet4",
+        chapterIndex: 0,
+        wordIndex: 1,
+        definition: "workflow definition",
+        mistakes: [],
+        createdAt: "2026-06-01T00:01:00.000Z",
+      })]),
+    })
+    await fetch(`${baseUrl}/api/v1/qwerty/records/chapter`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: new Blob([JSON.stringify({
+        id: "chapter-export",
+        dictId: "cet4",
+        dictName: "CET-4",
+        chapterIndex: 0,
+        durationMs: 30_000,
+        wordCount: 20,
+        correctCount: 19,
+        wrongCount: 1,
+        accuracy: 0.95,
+        correctWordIndexes: [0, 1],
+        createdAt: "2026-06-01T00:02:00.000Z",
+      })]),
+    })
+
+    const response = await fetch(`${baseUrl}/api/v1/export`)
+
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      format: "read-frog-learning-daemon-v1",
+      contractVersion: LEARNING_CONTRACT_VERSION,
+      projectionVersion: "projection-3",
+      eventId: "event-3",
+      stats: {
+        captureCount: 1,
+        qwertyRecordCount: 1,
+        qwertyChapterRecordCount: 1,
+        projectionEntryCount: 2,
+      },
+      state: {
+        captures: [
+          {
+            id: "capture-export",
+            text: "repeatable workflow",
+          },
+        ],
+        qwertyWordRecords: [
+          {
+            id: "record-export",
+            word: "workflow",
+            definition: "workflow definition",
+          },
+        ],
+        qwertyChapterRecords: [
+          {
+            id: "chapter-export",
+            dictId: "cet4",
+          },
+        ],
+        entries: expect.arrayContaining([
+          expect.objectContaining({
+            normalizedText: "workflow",
+            status: "review",
+          }),
+        ]),
+      },
+    })
+  })
+
+  it("imports learning data idempotently and rebuilds the mastery projection", async () => {
+    const payload = {
+      format: "read-frog-learning-daemon-v1",
+      state: {
+        captures: [
+          {
+            id: "capture-import",
+            text: "repeatable workflow",
+            context: "A repeatable workflow helps teams improve.",
+            createdAt: "2026-06-01T00:00:00.000Z",
+            extractedItems: [
+              {
+                text: "workflow",
+                kind: "word",
+                explanation: { meaningZh: "workflow definition" },
+              },
+            ],
+          },
+        ],
+        qwertyWordRecords: [
+          {
+            id: "record-import",
+            word: "ability",
+            input: "ability",
+            correct: true,
+            accuracy: 1,
+            durationMs: 1100,
+            definition: "ability definition",
+            mistakes: [],
+            createdAt: "2026-06-01T00:01:00.000Z",
+          },
+        ],
+        qwertyChapterRecords: [
+          {
+            id: "chapter-import",
+            dictId: "cet4",
+            dictName: "CET-4",
+            chapterIndex: 2,
+            durationMs: 40_000,
+            wordCount: 20,
+            correctCount: 18,
+            wrongCount: 2,
+            accuracy: 0.9,
+            correctWordIndexes: [40, 41],
+            createdAt: "2026-06-01T00:02:00.000Z",
+          },
+        ],
+        entries: [],
+      },
+    }
+
+    const firstImportResponse = await fetch(`${baseUrl}/api/v1/import`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: new Blob([JSON.stringify(payload)]),
+    })
+    await expect(firstImportResponse.json()).resolves.toMatchObject({
+      ok: true,
+      changed: true,
+      projectionVersion: "projection-1",
+      eventId: "event-1",
+      imported: {
+        captures: 1,
+        qwertyWordRecords: 1,
+        qwertyChapterRecords: 1,
+        projectionEntries: 3,
+      },
+      skipped: {
+        captures: 0,
+        qwertyWordRecords: 0,
+        qwertyChapterRecords: 0,
+      },
+    })
+
+    const secondImportResponse = await fetch(`${baseUrl}/api/v1/import`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: new Blob([JSON.stringify(payload)]),
+    })
+    await expect(secondImportResponse.json()).resolves.toMatchObject({
+      ok: true,
+      changed: false,
+      projectionVersion: "projection-1",
+      eventId: "event-1",
+      imported: {
+        captures: 0,
+        qwertyWordRecords: 0,
+        qwertyChapterRecords: 0,
+        projectionEntries: 0,
+      },
+      skipped: {
+        captures: 1,
+        qwertyWordRecords: 1,
+        qwertyChapterRecords: 1,
+      },
+    })
+
+    const workspaceResponse = await fetch(`${baseUrl}/api/v1/workspace/state`)
+    await expect(workspaceResponse.json()).resolves.toMatchObject({
+      ok: true,
+      projectionVersion: "projection-1",
+      stats: {
+        captureCount: 1,
+        qwertyRecordCount: 1,
+        qwertyChapterRecordCount: 1,
+        projectionEntryCount: 3,
+      },
+      captures: [{ id: "capture-import" }],
+      qwertyWordRecords: [{ id: "record-import", word: "ability" }],
+      qwertyChapterRecords: [{ id: "chapter-import", dictId: "cet4", chapterIndex: 2 }],
+    })
+
+    const projectionResponse = await fetch(`${baseUrl}/api/v1/projection/terms?terms=repeatable%20workflow,workflow,ability`)
+    await expect(projectionResponse.json()).resolves.toMatchObject({
+      ok: true,
+      projectionVersion: "projection-1",
+      entries: expect.arrayContaining([
+        expect.objectContaining({
+          normalizedText: "repeatable workflow",
+          kind: "phrase",
+          status: "learning",
+        }),
+        expect.objectContaining({
+          normalizedText: "workflow",
+          kind: "word",
+          definition: "workflow definition",
+        }),
+        expect.objectContaining({
+          normalizedText: "ability",
+          kind: "word",
+          status: "review",
+          definition: "ability definition",
+        }),
+      ]),
+    })
+  })
+
+  it("imports newer records over existing records with the same stable id", async () => {
+    await fetch(`${baseUrl}/api/v1/capture/selection`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: new Blob([JSON.stringify({
+        id: "capture-upsert",
+        text: "old workflow",
+        createdAt: "2026-06-01T00:00:00.000Z",
+        explanation: { meaningZh: "old definition" },
+        extractedItems: [],
+      })]),
+    })
+
+    const response = await fetch(`${baseUrl}/api/v1/import`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: new Blob([JSON.stringify({
+        captures: [
+          {
+            id: "capture-upsert",
+            text: "new workflow",
+            createdAt: "2026-06-01T00:10:00.000Z",
+            explanation: { meaningZh: "new definition" },
+            extractedItems: [],
+          },
+        ],
+        qwertyWordRecords: [],
+        qwertyChapterRecords: [],
+        entries: [],
+      })]),
+    })
+
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      changed: true,
+      imported: {
+        captures: 1,
+      },
+      skipped: {
+        captures: 0,
+      },
+    })
+
+    const exportResponse = await fetch(`${baseUrl}/api/v1/export`)
+    await expect(exportResponse.json()).resolves.toMatchObject({
+      state: {
+        captures: [
+          {
+            id: "capture-upsert",
+            text: "new workflow",
+            createdAt: "2026-06-01T00:10:00.000Z",
+          },
+        ],
+      },
+    })
+  })
+
   it("serializes concurrent daemon writes so bridge and workspace updates do not overwrite each other", async () => {
     await Promise.all([
       fetch(`${baseUrl}/api/v1/capture/selection`, {

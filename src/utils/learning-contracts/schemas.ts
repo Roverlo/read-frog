@@ -262,6 +262,62 @@ export const learningWorkspaceStateResponseSchema = z.object({
   qwertyMistakes: learningWorkspaceQwertyMistakesSummarySchema,
 })
 
+export const learningDaemonExportFormatSchema = z.literal("read-frog-learning-daemon-v1")
+
+export const learningDaemonPortableStateSchema = z.object({
+  captures: z.array(learningCaptureSelectionRequestSchema).default([]),
+  qwertyWordRecords: z.array(learningQwertyWordRecordRequestSchema).default([]),
+  qwertyChapterRecords: z.array(learningQwertyChapterRecordRequestSchema).default([]),
+  entries: z.array(masteryProjectionEntrySchema).default([]),
+})
+
+export const learningDaemonImportSummarySchema = z.object({
+  captures: z.number().int().nonnegative(),
+  qwertyWordRecords: z.number().int().nonnegative(),
+  qwertyChapterRecords: z.number().int().nonnegative(),
+  projectionEntries: z.number().int().nonnegative(),
+})
+
+export const learningDaemonExportResponseSchema = z.object({
+  ok: z.literal(true),
+  format: learningDaemonExportFormatSchema,
+  contractVersion: z.number().int().min(1),
+  exportedAt: z.string().datetime(),
+  projectionVersion: z.string(),
+  eventId: z.string().optional(),
+  stats: learningWorkspaceStatsSchema,
+  state: learningDaemonPortableStateSchema,
+})
+
+export const learningDaemonImportRequestSchema = z.union([
+  z.object({
+    format: learningDaemonExportFormatSchema.optional(),
+    state: learningDaemonPortableStateSchema,
+  }),
+  z.object({
+    format: learningDaemonExportFormatSchema.optional(),
+    data: learningDaemonPortableStateSchema,
+  }),
+  learningDaemonPortableStateSchema,
+]).transform((input) => {
+  if ("state" in input) {
+    return input.state
+  }
+  if ("data" in input) {
+    return input.data
+  }
+  return input
+})
+
+export const learningDaemonImportResponseSchema = z.object({
+  ok: z.literal(true),
+  changed: z.boolean(),
+  projectionVersion: z.string(),
+  eventId: z.string().optional(),
+  imported: learningDaemonImportSummarySchema,
+  skipped: learningDaemonImportSummarySchema,
+})
+
 export const masteryProjectionTermsRequestSchema = z.object({
   terms: z.array(z.string().trim().min(1)).min(1).max(MAX_MASTERY_PROJECTION_TERMS),
 })
@@ -273,8 +329,13 @@ export type LearningCaptureExtractedItem = z.infer<typeof learningCaptureExtract
 export type LearningCaptureSelectionInput = z.input<typeof learningCaptureSelectionInputSchema>
 export type LearningCaptureSelectionRequest = z.infer<typeof learningCaptureSelectionRequestSchema>
 export type LearningCaptureSelectionResponse = z.infer<typeof learningCaptureSelectionResponseSchema>
+export type LearningDaemonExportResponse = z.infer<typeof learningDaemonExportResponseSchema>
+export type LearningDaemonImportData = z.infer<typeof learningDaemonImportRequestSchema>
+export type LearningDaemonImportResponse = z.infer<typeof learningDaemonImportResponseSchema>
+export type LearningDaemonImportSummary = z.infer<typeof learningDaemonImportSummarySchema>
 export type LearningDaemonEvent = z.infer<typeof learningDaemonEventSchema>
 export type LearningDaemonHealthResponse = z.infer<typeof learningDaemonHealthResponseSchema>
+export type LearningDaemonPortableState = z.infer<typeof learningDaemonPortableStateSchema>
 export type LearningQwertyMistake = z.infer<typeof learningQwertyMistakeSchema>
 export type LearningQwertyDictionariesResponse = z.infer<typeof learningQwertyDictionariesResponseSchema>
 export type LearningQwertyDictionaryChapterResponse = z.infer<typeof learningQwertyDictionaryChapterResponseSchema>

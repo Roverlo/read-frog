@@ -1,8 +1,11 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type {
   LearningCaptureSelectionRequest,
+  LearningDaemonExportResponse,
   LearningDaemonEvent,
   LearningDaemonHealthResponse,
+  LearningDaemonImportData,
+  LearningDaemonImportResponse,
   LearningQwertyChapterRecordRequest,
   LearningQwertyWordRecordRequest,
   MasteryProjectionResponse,
@@ -16,7 +19,10 @@ import {
   learningCaptureSelectionRequestSchema,
   learningCaptureSelectionResponseSchema,
   learningDaemonEventSchema,
+  learningDaemonExportResponseSchema,
   learningDaemonHealthResponseSchema,
+  learningDaemonImportRequestSchema,
+  learningDaemonImportResponseSchema,
   learningQwertyChapterRecordRequestSchema,
   learningQwertyChapterRecordResponseSchema,
   learningQwertyDictionariesResponseSchema,
@@ -45,7 +51,7 @@ export interface LearningDaemonServerOptions {
   maxBodyBytes?: number
 }
 
-const DEFAULT_MAX_BODY_BYTES = 1024 * 1024
+const DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024
 const DEFAULT_ALLOWED_ORIGINS = [
   "http://127.0.0.1",
   "http://localhost",
@@ -213,6 +219,58 @@ async function handleWorkspaceState(store: LearningDaemonStore, response: Server
   sendJson(response, 200, learningWorkspaceStateResponseSchema.parse(
     await store.getWorkspaceState(),
   ))
+}
+
+async function handleExport(store: LearningDaemonStore, response: ServerResponse) {
+  const [state, workspaceState] = await Promise.all([
+    store.getState(),
+    store.getWorkspaceState(),
+  ])
+  const body: LearningDaemonExportResponse = learningDaemonExportResponseSchema.parse({
+    ok: true,
+    format: "read-frog-learning-daemon-v1",
+    contractVersion: LEARNING_CONTRACT_VERSION,
+    exportedAt: new Date().toISOString(),
+    projectionVersion: state.projectionVersion,
+    eventId: state.eventId,
+    stats: workspaceState.stats,
+    state: {
+      captures: state.captures,
+      qwertyWordRecords: state.qwertyWordRecords,
+      qwertyChapterRecords: state.qwertyChapterRecords,
+      entries: state.entries,
+    },
+  })
+  sendJson(response, 200, body)
+}
+
+async function handleImport(
+  request: IncomingMessage,
+  response: ServerResponse,
+  store: LearningDaemonStore,
+  maxBodyBytes: number,
+  events: LearningDaemonEventHub,
+) {
+  const data: LearningDaemonImportData = learningDaemonImportRequestSchema.parse(
+    await readJsonBody(request, maxBodyBytes),
+  )
+  const result = await store.importLearningData(data)
+  const body: LearningDaemonImportResponse = learningDaemonImportResponseSchema.parse({
+    ok: true,
+    changed: result.changed,
+    projectionVersion: result.projectionVersion,
+    eventId: result.eventId,
+    imported: result.imported,
+    skipped: result.skipped,
+  })
+  sendJson(response, 200, body)
+  if (result.changed) {
+    publishProjectionUpdated(events, {
+      eventId: result.eventId,
+      projectionVersion: result.projectionVersion,
+      changedTerms: result.changedTerms,
+    })
+  }
 }
 
 async function handleProjectionTerms(
@@ -391,6 +449,16 @@ export function createLearningDaemonServer(options: LearningDaemonServerOptions)
 
       if (request.method === "GET" && path === "/api/v1/workspace/state") {
         await handleWorkspaceState(options.store, response)
+        return
+      }
+
+      if (request.method === "GET" && path === "/api/v1/export") {
+        await handleExport(options.store, response)
+        return
+      }
+
+      if (request.method === "POST" && path === "/api/v1/import") {
+        await handleImport(request, response, options.store, maxBodyBytes, events)
         return
       }
 
