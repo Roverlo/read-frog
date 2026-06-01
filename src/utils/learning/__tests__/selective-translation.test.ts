@@ -141,8 +141,73 @@ describe("selective learning translation", () => {
     expect(summary).not.toContain("workflow")
     expect(summary).toContain("constraint: daemon constraint")
     expect(sendMessageMock).toHaveBeenCalledWith("getLearningProjectionTerms", {
-      terms: expect.arrayContaining(["workflow", "constraint"]),
+      terms: expect.arrayContaining(["the workflow", "workflow", "constraint"]),
     })
+  })
+
+  it("prefers daemon phrase projection entries before individual word fallbacks", async () => {
+    sendMessageMock.mockResolvedValue({
+      status: "ok",
+      projectionVersion: "projection-1",
+      entries: [
+        {
+          normalizedText: "repeatable workflow",
+          kind: "phrase",
+          status: "learning",
+          confidence: 0.42,
+          definition: "daemon phrase",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+        {
+          normalizedText: "workflow",
+          kind: "word",
+          status: "review",
+          confidence: 0.62,
+          definition: "daemon workflow",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    })
+    const { buildLearningTranslationSummary } = await import("../selective-translation")
+
+    const summary = await buildLearningTranslationSummary("A repeatable workflow improves teams.", 6)
+
+    expect(summary).toContain("repeatable workflow: daemon phrase")
+    expect(summary).not.toContain("workflow: daemon workflow")
+    expect(sendMessageMock).toHaveBeenCalledWith("getLearningProjectionTerms", {
+      terms: expect.arrayContaining(["repeatable workflow", "workflow"]),
+    })
+  })
+
+  it("lets confidently mastered phrases suppress their covered word fallbacks", async () => {
+    sendMessageMock.mockResolvedValue({
+      status: "ok",
+      projectionVersion: "projection-1",
+      entries: [
+        {
+          normalizedText: "repeatable workflow",
+          kind: "phrase",
+          status: "mature",
+          confidence: 0.96,
+          definition: "daemon phrase",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+        {
+          normalizedText: "workflow",
+          kind: "word",
+          status: "review",
+          confidence: 0.62,
+          definition: "daemon workflow",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    })
+    const { buildLearningTranslationSummary } = await import("../selective-translation")
+
+    const summary = await buildLearningTranslationSummary("A repeatable workflow improves teams.", 6)
+
+    expect(summary).not.toContain("repeatable workflow")
+    expect(summary).not.toContain("workflow: daemon workflow")
   })
 
   it("uses cached daemon projection entries while the daemon is offline", async () => {

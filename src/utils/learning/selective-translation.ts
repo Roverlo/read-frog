@@ -10,8 +10,20 @@ export interface LearningTranslationTerm {
   status: "learning" | "dictionary"
 }
 
+interface LearningTextToken {
+  word: string
+  index: number
+}
+
+interface LearningPhraseCandidate {
+  term: string
+  startIndex: number
+  endIndex: number
+}
+
 const ENGLISH_WORD_RE = /\b[a-z][a-z'-]*\b/gi
 const MIN_WORD_LENGTH = 3
+const MAX_PHRASE_WORDS = 5
 const MASTERY_SKIP_CONFIDENCE = 0.86
 
 const VOCAB_DEFINITION_MAP = new Map(
@@ -20,6 +32,30 @@ const VOCAB_DEFINITION_MAP = new Map(
 
 function normalizeToken(token: string) {
   return normalizeLearningText(token.replace(/^'+|'+$/g, ""))
+}
+
+function getLearningTokens(text: string): LearningTextToken[] {
+  return [...text.matchAll(ENGLISH_WORD_RE)]
+    .map((match, index) => ({
+      word: normalizeToken(match[0]),
+      index,
+    }))
+    .filter(token => token.word.length >= MIN_WORD_LENGTH)
+}
+
+function getCandidatePhrases(tokens: LearningTextToken[]): LearningPhraseCandidate[] {
+  const candidates: LearningPhraseCandidate[] = []
+  for (let start = 0; start < tokens.length; start += 1) {
+    const maxLength = Math.min(MAX_PHRASE_WORDS, tokens.length - start)
+    for (let length = maxLength; length >= 2; length -= 1) {
+      candidates.push({
+        term: tokens.slice(start, start + length).map(token => token.word).join(" "),
+        startIndex: tokens[start]!.index,
+        endIndex: tokens[start + length - 1]!.index,
+      })
+    }
+  }
+  return candidates
 }
 
 function getCandidateForms(word: string) {
@@ -86,9 +122,10 @@ export function shouldTranslateProjectionEntry(entry: MasteryProjectionEntry, no
   return true
 }
 
-async function getProjectionEntriesByWord(uniqueWords: string[]) {
+async function getProjectionEntriesByTerm(queryTerms: string[]) {
   try {
-    const terms = [...new Set(uniqueWords.flatMap(getCandidateForms))]
+    const terms = [...new Set(queryTerms)]
+      .filter(Boolean)
       .slice(0, MAX_MASTERY_PROJECTION_TERMS)
     const response = await sendMessage("getLearningProjectionTerms", { terms })
     if (response.status !== "ok" && response.status !== "cached") {
@@ -97,7 +134,7 @@ async function getProjectionEntriesByWord(uniqueWords: string[]) {
 
     return new Map(
       response.entries
-        .filter(entry => entry.kind === "word")
+        .filter(entry => entry.kind === "word" || entry.kind === "phrase")
         .map(entry => [entry.normalizedText, entry]),
     )
   }
@@ -107,19 +144,64 @@ async function getProjectionEntriesByWord(uniqueWords: string[]) {
 }
 
 export async function buildLearningTranslationSummary(text: string, maxTerms: number): Promise<string> {
-  const tokens = [...text.matchAll(ENGLISH_WORD_RE)]
-    .map(match => normalizeToken(match[0]))
-    .filter(word => word.length >= MIN_WORD_LENGTH)
+  const tokens = getLearningTokens(text)
 
   if (tokens.length === 0) {
     return ""
   }
 
-  const uniqueWords = [...new Set(tokens)]
-  const projectionEntriesByText = await getProjectionEntriesByWord(uniqueWords)
+  const phraseCandidates = getCandidatePhrases(tokens)
+  const uniqueWords = [...new Set(tokens.map(token => token.word))]
+  const projectionEntriesByText = await getProjectionEntriesByTerm([
+    ...phraseCandidates.map(candidate => candidate.term),
+    ...uniqueWords.flatMap(getCandidateForms),
+  ])
 
   const terms: LearningTranslationTerm[] = []
-  for (const word of uniqueWords) {
+  const coveredTokenIndexes = new Set<number>()
+
+  for (const phrase of phraseCandidates) {
+    if (terms.length >= maxTerms) {
+      break
+    }
+    if ([...coveredTokenIndexes].some(index => index >= phrase.startIndex && index <= phrase.endIndex)) {
+      continue
+    }
+
+    const projectionEntry = projectionEntriesByText.get(phrase.term)
+    if (!projectionEntry || projectionEntry.kind !== "phrase") {
+      continue
+    }
+
+    if (!shouldTranslateProjectionEntry(projectionEntry)) {
+      for (let index = phrase.startIndex; index <= phrase.endIndex; index += 1) {
+        coveredTokenIndexes.add(index)
+      }
+      continue
+    }
+
+    if (!projectionEntry.definition) {
+      continue
+    }
+
+    terms.push({
+      word: phrase.term,
+      definitionZh: projectionEntry.definition,
+      status: "learning",
+    })
+    for (let index = phrase.startIndex; index <= phrase.endIndex; index += 1) {
+      coveredTokenIndexes.add(index)
+    }
+  }
+
+  const seenWords = new Set<string>()
+  for (const token of tokens) {
+    if (coveredTokenIndexes.has(token.index) || seenWords.has(token.word)) {
+      continue
+    }
+    seenWords.add(token.word)
+
+    const word = token.word
     const projectionEntry = findProjectionEntryForWord(projectionEntriesByText, word)
     if (projectionEntry && !shouldTranslateProjectionEntry(projectionEntry)) {
       continue

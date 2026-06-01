@@ -145,6 +145,9 @@ const checks = [
     if (!source.includes("confidence") || !source.includes("dueAt")) {
       failures.push("selective-translation.ts must consider daemon confidence and dueAt when deciding whether to translate")
     }
+    if (!source.includes("getCandidatePhrases") || !source.includes("coveredTokenIndexes")) {
+      failures.push("selective-translation.ts must prefer daemon phrase projection before word fallbacks")
+    }
     if (includesAny(source, localLearningWritePatterns)) {
       failures.push("selective-translation.ts imports or reads local learning persistence")
     }
