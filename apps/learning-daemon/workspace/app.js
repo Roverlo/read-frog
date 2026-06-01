@@ -53,6 +53,25 @@
       return Math.round((value ?? 0) * 100) + "%";
     }
 
+    function getStatusLabel(status) {
+      return {
+        unknown: "未知",
+        learning: "学习中",
+        review: "复习中",
+        mature: "已掌握",
+        archived: "已归档",
+      }[status] || status;
+    }
+
+    function getKindLabel(kind) {
+      return {
+        word: "单词",
+        phrase: "短语",
+        sentence: "句子",
+        paragraph: "段落",
+      }[kind] || kind;
+    }
+
     function sortEntries(entries) {
       return [...entries].sort((a, b) => {
         const statusOrder = { learning: 0, review: 1, unknown: 2, mature: 3, archived: 4 };
@@ -100,13 +119,13 @@
       const dot = $("health-dot");
       if (state.health?.ok) {
         dot.classList.add("ok");
-        setText("health-text", "Connected");
+        setText("health-text", "已连接");
         setText("daemon-service", state.health.service);
         setText("contract-version", state.health.contractVersion);
       }
       else {
         dot.classList.remove("ok");
-        setText("health-text", "Offline");
+        setText("health-text", "离线");
       }
     }
 
@@ -166,23 +185,23 @@
       const entry = activeEntry();
       const input = $("typing-input");
       if (!entry) {
-        setText("stage-word", "No terms yet");
-        setText("definition", "No projection terms or dictionary words are available.");
+        setText("stage-word", "暂无词条");
+        setText("definition", "还没有掌握度词条或词库单词。");
         input.value = "";
         input.disabled = true;
         setText("session-active", "-");
       }
       else {
         setText("stage-word", entry.entry.normalizedText);
-        setText("definition", entry.entry.definition || "No definition saved yet.");
+        setText("definition", entry.entry.definition || "还没有保存释义。");
         input.disabled = false;
         setText("session-active", entry.entry.normalizedText);
       }
       renderModeButtons();
       renderTypingGhost();
       setText("practice-source", entry?.source === "dictionary"
-        ? `${state.dictionary?.name ?? "Deck"} chapter practice`
-        : "Projection review queue");
+        ? `${state.dictionary?.name ?? "词库"} 章节练习`
+        : "掌握度复习队列");
       setText("session-attempts", state.session.attempts);
       setText("session-correct", state.session.correct);
       const accuracy = state.session.attempts
@@ -217,7 +236,7 @@
       });
       if (!response.ok) {
         const message = await response.text();
-        throw new Error(message || "Request failed: " + response.status);
+        throw new Error(message || "请求失败：" + response.status);
       }
       return response.json();
     }
@@ -228,7 +247,7 @@
       });
       if (!response.ok) {
         const message = await response.text();
-        throw new Error(message || "Request failed: " + response.status);
+        throw new Error(message || "请求失败：" + response.status);
       }
       return response.json();
     }
@@ -246,11 +265,11 @@
 
       const chapterCount = state.dictionary?.chapterCount ?? 0;
       setText("chapter-title", state.dictionary
-        ? `${state.dictionary.name} / Chapter ${state.chapterIndex + 1}`
-        : "No deck selected");
+        ? `${state.dictionary.name} / 第 ${state.chapterIndex + 1} 章`
+        : "未选择词库");
       setText("chapter-range", state.dictionaryWords.length
-        ? `${state.dictionaryWords[0].index + 1}-${state.dictionaryWords[state.dictionaryWords.length - 1].index + 1} of ${state.dictionary?.length ?? state.dictionaryWords.length}`
-        : "0 words");
+        ? `${state.dictionaryWords[0].index + 1}-${state.dictionaryWords[state.dictionaryWords.length - 1].index + 1} / ${state.dictionary?.length ?? state.dictionaryWords.length} 词`
+        : "0 词");
       $("previous-chapter-button").disabled = !state.dictionary || state.chapterIndex <= 0;
       $("next-chapter-button").disabled = !state.dictionary || state.chapterIndex >= chapterCount - 1;
     }
@@ -258,7 +277,7 @@
     function renderChapterWords(active) {
       const strip = $("chapter-word-strip");
       if (!state.dictionaryWords.length) {
-        strip.replaceChildren(emptyContext("Deck words load after the daemon serves the selected qwerty chapter."));
+        strip.replaceChildren(emptyContext("本地服务载入所选章节后，单词会出现在这里。"));
         renderDeckControls();
         return;
       }
@@ -287,9 +306,9 @@
     function renderProjection() {
       const body = $("projection-body");
       const entries = sortEntries(state.projection.entries);
-      setText("projection-count", entries.length + " entries");
+      setText("projection-count", entries.length + " 条");
       if (!entries.length) {
-        body.replaceChildren(emptyTableRow("No projection terms yet."));
+        body.replaceChildren(emptyTableRow("还没有掌握度词条。"));
         return;
       }
       body.replaceChildren(...entries.map((entry) => {
@@ -298,11 +317,11 @@
         const termCell = document.createElement("td");
         termCell.textContent = entry.normalizedText;
         const kindCell = document.createElement("td");
-        kindCell.textContent = entry.kind;
+        kindCell.textContent = getKindLabel(entry.kind);
         const statusCell = document.createElement("td");
         const statusText = document.createElement("span");
         statusText.className = "status " + entry.status;
-        statusText.textContent = entry.status;
+        statusText.textContent = getStatusLabel(entry.status);
         statusCell.append(statusText);
         const confidenceCell = document.createElement("td");
         confidenceCell.textContent = confidence;
@@ -334,28 +353,28 @@
       const items = [
         ...captures.slice(0, 6).map((capture) => ({
           title: capture.text,
-          detail: "capture"
-            + (capture.extractedCount ? " / " + capture.extractedCount + " extracted" : "")
+          detail: "划词"
+            + (capture.extractedCount ? " / 提取 " + capture.extractedCount + " 项" : "")
             + (capture.sourceTitle ? " / " + capture.sourceTitle : "")
             + (capture.context ? " / " + capture.context : ""),
         })),
         ...qwertyRecords.slice(0, 6).map((record) => ({
           title: record.word,
-          detail: "qwerty / " + (record.correct ? "correct" : "review")
+          detail: "qwerty / " + (record.correct ? "正确" : "需复习")
             + " / " + Math.round(record.accuracy * 100) + "%"
             + " / " + Math.round(record.durationMs / 1000) + "s",
         })),
         ...qwertyChapterRecords.slice(0, 4).map((record) => ({
-          title: `${record.dictName ?? record.dictId} / Chapter ${record.chapterIndex + 1}`,
-          detail: "chapter"
+          title: `${record.dictName ?? record.dictId} / 第 ${record.chapterIndex + 1} 章`,
+          detail: "章节"
             + " / " + record.correctCount + "/" + record.wordCount
             + " / " + Math.round(record.accuracy * 100) + "%"
             + " / " + Math.round(record.durationMs / 1000) + "s",
         })),
       ];
-      setText("inbox-count", captures.length + " captures");
+      setText("inbox-count", captures.length + " 条划词");
       if (!items.length) {
-        list.replaceChildren(emptyContext("Selection captures will appear here after the extension syncs."));
+        list.replaceChildren(emptyContext("扩展同步划词后，会出现在这里。"));
         return;
       }
       list.replaceChildren(...items.map((entry) => {
@@ -374,10 +393,10 @@
       const errorList = $("error-book-list");
       const keyList = $("key-mistake-list");
       const mistakes = state.workspaceState?.qwertyMistakes ?? { words: [], keys: [] };
-      setText("error-count", mistakes.words.length + " words");
+      setText("error-count", mistakes.words.length + " 个单词");
 
       if (!mistakes.words.length) {
-        errorList.replaceChildren(emptyContext("No qwerty mistakes yet."));
+        errorList.replaceChildren(emptyContext("还没有 qwerty 错题。"));
       }
       else {
         errorList.replaceChildren(...mistakes.words.slice(0, 5).map((entry) => {
@@ -386,9 +405,9 @@
           const title = document.createElement("strong");
           title.textContent = entry.word;
           const detail = document.createElement("span");
-          detail.textContent = "missed "
+          detail.textContent = "错误 "
             + entry.count
-            + " / last input: "
+            + " 次 / 上次输入："
             + entry.lastInput
             + " / "
             + Math.round(entry.lastAccuracy * 100)
@@ -402,9 +421,9 @@
         const item = document.createElement("div");
         item.className = "key-pair";
         const expected = document.createElement("strong");
-        expected.textContent = entry.expected || "space";
+        expected.textContent = entry.expected || "空格";
         const actual = document.createElement("strong");
-        actual.textContent = entry.actual || "blank";
+        actual.textContent = entry.actual || "空";
         item.append(expected, " -> ", actual, " x", String(entry.count));
         return item;
       }));
@@ -444,11 +463,11 @@
 
     async function exportWorkspaceData() {
       $("data-status").classList.remove("error");
-      setText("data-status", "Exporting...");
+      setText("data-status", "正在导出...");
       try {
         const data = await getJson("/api/v1/export");
         downloadBlob(`read-frog-learning-${new Date().toISOString().slice(0, 10)}.json`, data);
-        setText("data-status", `Exported ${data.stats?.projectionEntryCount ?? 0} projection entries.`);
+        setText("data-status", `已导出 ${data.stats?.projectionEntryCount ?? 0} 条掌握度词条。`);
       }
       catch (error) {
         $("data-status").classList.add("error");
@@ -461,13 +480,13 @@
         return;
       }
       $("data-status").classList.remove("error");
-      setText("data-status", "Importing...");
+      setText("data-status", "正在导入...");
       try {
         const payload = JSON.parse(await file.text());
         const response = await postJson("/api/v1/import", payload);
         setText("data-status", response.changed
-          ? `Imported ${response.imported.projectionEntries} projection changes.`
-          : "Import finished with no changes.");
+          ? `已导入 ${response.imported.projectionEntries} 条掌握度变更。`
+          : "导入完成，没有新增变更。");
         await refresh();
       }
       catch (error) {
@@ -541,7 +560,7 @@
     async function loadDictionaryChapter(dictId, chapterIndex) {
       const chapterResponse = await fetch("/api/v1/qwerty/dictionaries/" + encodeURIComponent(dictId) + "/chapter/" + encodeURIComponent(String(chapterIndex)));
       if (!chapterResponse.ok) {
-        throw new Error("Dictionary chapter failed to load: " + chapterResponse.status);
+        throw new Error("词库章节加载失败：" + chapterResponse.status);
       }
       const chapter = await chapterResponse.json();
       state.dictionaryId = chapter.dictionary.id;
@@ -604,7 +623,7 @@
         }
         $("typing-input").value = "";
         state.startedAt = Date.now();
-        setText("toast", correct ? "Recorded" : "Recorded for review");
+        setText("toast", correct ? "已记录" : "已加入复习");
         $("toast").classList.remove("error");
         await maybeRecordChapterCompletion();
         await refresh();
@@ -669,7 +688,7 @@
         createdAt: new Date().toISOString(),
       });
       state.session.recordedChapterKeys.push(chapterKey);
-      setText("toast", "Chapter recorded");
+      setText("toast", "章节已记录");
       await refresh();
     }
 

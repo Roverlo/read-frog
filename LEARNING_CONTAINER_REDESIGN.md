@@ -1,15 +1,15 @@
 # Read Frog Learning Container Redesign
 
-Status: proposal for the `feature/learning-loop` branch.
+Status: active implementation on the `feature/learning-loop` branch.
 Last verified: 2026-06-01.
 
-This document redesigns the learning loop around three upstream projects:
+This document tracks the learning-loop redesign around three upstream projects:
 
 - `mengxi-ream/read-frog` upstream: browser extension, page translation, selection tools, provider configuration.
 - `RealKai42/qwerty-learner` upstream: typing-first vocabulary practice, dictionary catalog, chapter progress, mistake analytics.
 - `nexu-io/open-design` reference: local-first app split into a web workspace, a local daemon, and shared contracts.
 
-The intent is to keep Read Frog easy to rebase onto upstream while letting the learning workspace become a richer product surface than an extension options page can reasonably support.
+The intent is to keep Read Frog easy to rebase onto upstream while letting the learning workspace become a richer, Chinese-first product surface than an extension options page can reasonably support.
 
 ## Decision Summary
 
@@ -22,9 +22,33 @@ The intent is to keep Read Frog easy to rebase onto upstream while letting the l
 7. Redesign the UI as a dense learning cockpit inspired by open-design's workspace/daemon split, not as the current card-heavy options page.
 8. Maintain upstream compatibility by isolating fork code behind narrow extension points and keeping upstream files close to stock.
 
-## Current State Findings
+## Implementation Snapshot
 
-The current branch proves the learning direction is useful, but it is not a sustainable shape.
+The branch has moved past the proposal stage. Current implementation:
+
+- `apps/learning-daemon` is a containerized local daemon and static learning workspace served at `http://127.0.0.1:7457/`.
+- Docker Compose is available at `apps/learning-daemon/compose.yaml` and the container exposes a passing `/api/v1/health` endpoint.
+- The daemon owns the current learning data store, projection rebuilds, SSE events, qwerty dictionaries, qwerty word/chapter records, mistake aggregation, import, and export.
+- The workspace UI is Chinese-first and shows overview, qwerty typing, mastery projection, reading inbox, error book, and data import/export surfaces.
+- `src/utils/learning-contracts` holds the shared DTO/schema boundary for extension and daemon code in this stage.
+- `src/utils/learning-bridge` and `src/entrypoints/background/learning-bridge.ts` provide the extension bridge and offline/local fallback path.
+- The extension learning options page is now a thin bridge/migration surface instead of the full learning cockpit.
+- Legacy learning data can be migrated/exported into the daemon.
+- Selective translation reads the daemon projection and scores terms by mastery confidence, including phrase-aware matching.
+- Qwerty dictionary assets have been moved under the daemon instead of the extension output, with a guard in `scripts/check-upstream-sync.ts`.
+- `FORK_PATCHES.md` documents the fork patch boundary for future upstream merges.
+
+Still pending:
+
+- Replace the JSON file store with SQLite and migrations.
+- Implement the pairing/auth flow instead of trusting only localhost and CORS boundaries.
+- Split contracts/qwerty domain into workspace packages when the repo is ready for a pnpm workspace conversion.
+- Add broader real-browser E2E coverage for extension-to-daemon sync and page translation behavior.
+- Build richer Today/Decks/Analytics screens beyond the current compact workspace.
+
+## Original State Findings
+
+These were the main problems before the daemon split. They remain useful context for why this branch isolates learning work outside upstream-owned extension surfaces.
 
 - The learning page is monolithic: `src/entrypoints/options/pages/learning/index.tsx` is about 1500 lines and owns dashboard, manual add, review, qwerty typing, import/export, GitHub sync, settings, and data loading.
 - Learning changes are spread across high-churn extension surfaces: options routing/sidebar, popup, selection toolbar, config schemas, Dexie schema, translate variants, i18n, and bundled public dictionaries.
@@ -157,21 +181,17 @@ flowchart LR
 
 The current repo is not a pnpm workspace. The split can be introduced in two stages.
 
-Stage 1 keeps risk low:
+Stage 1 kept risk low and is the current shape:
 
 ```text
 src/
   utils/learning-bridge/
-  utils/learning-projection/
-packages/
-  learning-contracts/
-  qwerty-domain/
+  utils/learning-contracts/
 apps/
-  learning-web/
   learning-daemon/
 ```
 
-Add `pnpm-workspace.yaml` only when the new apps/packages are ready to build. Until then, contracts can be developed under `src/utils/learning-contracts` and moved in one mechanical patch.
+`pnpm-workspace.yaml` is still intentionally deferred. Contracts are developed under `src/utils/learning-contracts` and can be moved in one mechanical patch later.
 
 Stage 2 converts the fork into a workspace:
 
@@ -514,7 +534,7 @@ The learning workspace should feel like an operational cockpit for language lear
 
 ### Development
 
-Add Docker Compose after workspace packages exist:
+Docker Compose is implemented:
 
 ```yaml
 services:
@@ -526,7 +546,6 @@ services:
       - "127.0.0.1:7457:7457"
     volumes:
       - readfrog-learning-data:/data
-      - ./apps/learning-web/dist:/app/web:ro
     environment:
       READFROG_LEARNING_DATA_DIR: /data
       READFROG_LEARNING_HOST: 127.0.0.1
@@ -538,15 +557,16 @@ volumes:
 
 ### Runtime options
 
-Milestone 1:
+Milestone 1, implemented:
 
-- Node daemon and Vite web app running directly through pnpm.
-- Initial daemon API may use an appendable JSON/file store while the bridge and contracts stabilize.
+- Node daemon with a daemon-served static workspace.
+- Initial daemon API uses a JSON/file store while the bridge and contracts stabilize.
+- Docker Compose builds and runs the daemon/workspace at `127.0.0.1:7457`.
 
-Milestone 2:
+Milestone 2, next:
 
-- Docker Compose for local data isolation and reproducible testing.
 - SQLite store and migrations replace the initial JSON/file store.
+- Pairing/auth is enforced for extension writes.
 
 Milestone 3:
 
@@ -629,6 +649,8 @@ git merge upstream/main
 
 ### Phase 0: stabilization
 
+Status: complete.
+
 - Add this design document.
 - Fix mojibake in current learning strings only if they block migration or testing.
 - Keep current branch passing tests while the split is prepared.
@@ -639,6 +661,8 @@ Acceptance:
 - existing extension tests still pass when code changes are made.
 
 ### Phase 1: contracts and bridge
+
+Status: implemented in `src/utils/learning-contracts`, `src/utils/learning-bridge`, and the background bridge entry.
 
 - Create `packages/learning-contracts`.
 - Add DTO schemas and API client.
@@ -653,6 +677,8 @@ Acceptance:
 
 ### Phase 2: daemon data core
 
+Status: partially implemented. JSON-backed daemon state, projection rebuilds, SSE, import/export, and legacy migration exist. SQLite/migrations and pairing remain open.
+
 - Add canonical DB and migrations.
 - Implement legacy import from current Dexie export.
 - Implement projection builder and SSE events.
@@ -666,6 +692,8 @@ Acceptance:
 
 ### Phase 3: qwerty domain port
 
+Status: partially implemented. Qwerty dictionaries, chapter slicing, word/chapter records, and mistake aggregation exist inside the daemon. A separate `packages/qwerty-domain` package is still deferred.
+
 - Create `packages/qwerty-domain`.
 - Port dictionary manifest/normalizer/chapter slicing/scoring/reducer.
 - Add attribution/license notes.
@@ -678,6 +706,8 @@ Acceptance:
 
 ### Phase 4: learning web workspace
 
+Status: partially implemented. The daemon serves a compact Chinese-first workspace with overview, practice, projection, inbox, errors, and data screens. Rich Today/Decks/Analytics screens remain roadmap work.
+
 - Build the redesigned workspace shell.
 - Implement Today, Practice, Reading Inbox, Decks, Error Book, Analytics.
 - Wire the app to daemon APIs only through contracts.
@@ -688,6 +718,8 @@ Acceptance:
 - Mobile-width smoke test for non-overlap and stable typing surface.
 
 ### Phase 5: selective translation v2
+
+Status: partially implemented. Selective translation reads daemon projection data and uses mastery confidence with phrase-aware scoring. Threshold settings and inline annotation modes remain roadmap work.
 
 - Replace local-only lookup with projection-aware scoring.
 - Add thresholds/settings.
@@ -700,6 +732,8 @@ Acceptance:
 - Browser validation on a real page.
 
 ### Phase 6: upstream cleanup
+
+Status: partially implemented. `FORK_PATCHES.md` and `scripts/check-upstream-sync.ts` exist, and qwerty assets are guarded from extension output. Future upstream merge rehearsals still need to be run regularly.
 
 - Remove rich learning UI from extension options.
 - Replace it with "Open Learning Workspace" plus bridge status.
@@ -758,9 +792,10 @@ Upstream sync:
 
 ## Near-Term Next Patch
 
-The next implementation patch should be small and architectural:
+The next implementation patch should focus on verification and persistence:
 
-1. Add `packages/learning-contracts` with pure schemas for health, pairing, projection, capture, item review, and qwerty records.
-2. Add a thin extension bridge service that can call a local daemon and fall back to local queue.
-3. Add tests for offline fallback and projection parsing.
-4. Keep all existing user-visible learning UI unchanged until the bridge is proven.
+1. Add real-browser E2E validation for extension-to-daemon capture sync and selective translation against the built extension.
+2. Move daemon persistence from JSON files to SQLite with frozen migrations.
+3. Add pairing/auth for daemon writes from the extension.
+4. Expand the Chinese-first workspace with a Today queue, deck progress map, and analytics surfaces.
+5. Keep `scripts/check-upstream-sync.ts` and `FORK_PATCHES.md` updated after every fork-specific patch.

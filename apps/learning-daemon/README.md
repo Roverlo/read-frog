@@ -1,6 +1,6 @@
 # Read Frog Learning Daemon
 
-This is the first container-ready daemon for the split learning workspace. It gives the extension bridge a real local API target while the full web workspace and SQLite store are still being built.
+This is the first container-ready daemon for the split learning workspace. It gives the extension bridge a real local API target while the full web workspace and SQLite store are still being built. The workspace UI is Chinese-first because Read Frog's learning loop is aimed at Chinese users studying English.
 
 ## Run Locally
 
