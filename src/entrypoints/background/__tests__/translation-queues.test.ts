@@ -306,6 +306,26 @@ describe("translation queue helpers", () => {
     )
   })
 
+  it("returns webpage translations even when translation memory recording fails", async () => {
+    recordTranslationMemoryMock.mockRejectedValueOnce(new Error("memory write failed"))
+
+    const { setUpWebPageTranslationQueue } = await import("../translation-queues")
+    await setUpWebPageTranslationQueue()
+
+    const handler = getRegisteredMessageHandler("enqueueTranslateRequest")
+    const result = await handler({
+      data: {
+        text: "hello",
+        langConfig: DEFAULT_CONFIG.language,
+        providerConfig: microsoftProvider,
+        scheduleAt: Date.now(),
+        hash: "webpage-hash",
+      },
+    })
+
+    expect(result).toBe("translated subtitle")
+  })
+
   it("records successful subtitle translations in translation memory", async () => {
     const { setUpSubtitlesTranslationQueue } = await import("../translation-queues")
     await setUpSubtitlesTranslationQueue()
@@ -338,6 +358,26 @@ describe("translation queue helpers", () => {
       }),
       expect.any(Object),
     )
+  })
+
+  it("returns subtitle translations even when translation memory recording fails", async () => {
+    recordTranslationMemoryMock.mockRejectedValueOnce(new Error("memory write failed"))
+
+    const { setUpSubtitlesTranslationQueue } = await import("../translation-queues")
+    await setUpSubtitlesTranslationQueue()
+
+    const handler = getRegisteredMessageHandler("enqueueSubtitlesTranslateRequest")
+    const result = await handler({
+      data: {
+        text: "subtitle",
+        langConfig: DEFAULT_CONFIG.language,
+        providerConfig: microsoftProvider,
+        scheduleAt: Date.now(),
+        hash: "subtitle-hash",
+      },
+    })
+
+    expect(result).toBe("translated subtitle")
   })
 
   it("exposes webpage summary generation as a separate background handler", async () => {

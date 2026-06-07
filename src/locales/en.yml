@@ -290,6 +290,7 @@ options:
       test: Test Connection
       testSuccess: Knowledge base endpoint is reachable
       testFailed: Knowledge base endpoint test failed
+      testError: Failed to test knowledge base endpoint
     data:
       title: Knowledge Data
       description: Inspect, export, or clear the long-term learning database stored in this browser.
@@ -299,12 +300,15 @@ options:
       exportJsonl: Export JSONL
       exportJson: Export JSON
       exportSuccess: Knowledge base exported
+      exportError: Failed to export knowledge base
       clear: Clear
       clearSuccess: Knowledge base cleared
+      clearError: Failed to clear knowledge base
       clearDialogTitle: Clear knowledge base?
       clearDialogDescription: This will permanently delete saved translation memory, learning events, and pending sync records from this browser.
       cancel: Cancel
       confirmClear: Clear
+      statsError: Failed to load knowledge base statistics
   floatingButtonAndToolbar:
     title: Floating Button & Toolbar
     floatingButtonDemoImageAlt: Floating Button Demo

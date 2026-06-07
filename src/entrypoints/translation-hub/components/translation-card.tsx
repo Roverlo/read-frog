@@ -63,17 +63,22 @@ export function TranslationCard({ providerId, isExpanded, onExpandedChange }: Tr
             return undefined
           }
 
-          await sendMessage("recordTranslationMemory", {
-            sourceText: req.inputText,
-            translatedText: result,
-            sourceLang: req.sourceLanguage,
-            targetLang: req.targetLanguage,
-            providerConfig: provider,
-            surface: "translationHub",
-            url: null,
-            title: document.title,
-            contextText: null,
-          })
+          try {
+            await sendMessage("recordTranslationMemory", {
+              sourceText: req.inputText,
+              translatedText: result,
+              sourceLang: req.sourceLanguage,
+              targetLang: req.targetLanguage,
+              providerConfig: provider,
+              surface: "translationHub",
+              url: null,
+              title: document.title,
+              contextText: null,
+            })
+          }
+          catch {
+            // Translation memory is best-effort and must not hide the translation result.
+          }
 
           return result
         },

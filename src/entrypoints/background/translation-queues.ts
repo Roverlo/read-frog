@@ -227,6 +227,15 @@ export async function setUpWebPageTranslationQueue() {
     promptResolver: getTranslatePrompt,
   })
 
+  const recordTranslationMemorySafely = async (input: Parameters<typeof recordTranslationMemory>[0]) => {
+    try {
+      await recordTranslationMemory(input, config)
+    }
+    catch (error) {
+      logger.warn("Failed to record translation memory", error)
+    }
+  }
+
   onMessage("enqueueTranslateRequest", async (message) => {
     const { data: { text, langConfig, providerConfig, scheduleAt, hash, webTitle, webContent, webSummary, surface = "page", url, title, contextText } } = message
 
@@ -235,7 +244,7 @@ export async function setUpWebPageTranslationQueue() {
       const cached = await db.translationCache.get(hash)
       if (cached) {
         const cachedTranslation = normalizeTranslationOutput(providerConfig, cached.translation)
-        await recordTranslationMemory({
+        await recordTranslationMemorySafely({
           sourceText: text,
           translatedText: cachedTranslation,
           sourceLang: langConfig.sourceCode,
@@ -245,7 +254,7 @@ export async function setUpWebPageTranslationQueue() {
           url,
           title: title ?? webTitle,
           contextText: contextText ?? webContent,
-        }, config)
+        })
         return cachedTranslation
       }
     }
@@ -276,7 +285,7 @@ export async function setUpWebPageTranslationQueue() {
         createdAt: new Date(),
       })
 
-      await recordTranslationMemory({
+      await recordTranslationMemorySafely({
         sourceText: text,
         translatedText: result,
         sourceLang: langConfig.sourceCode,
@@ -286,7 +295,7 @@ export async function setUpWebPageTranslationQueue() {
         url,
         title: title ?? webTitle,
         contextText: contextText ?? webContent,
-      }, config)
+      })
     }
 
     return result
@@ -326,6 +335,15 @@ export async function setUpSubtitlesTranslationQueue() {
     promptResolver: getSubtitlesTranslatePrompt,
   })
 
+  const recordTranslationMemorySafely = async (input: Parameters<typeof recordTranslationMemory>[0]) => {
+    try {
+      await recordTranslationMemory(input, config)
+    }
+    catch (error) {
+      logger.warn("Failed to record translation memory", error)
+    }
+  }
+
   onMessage("enqueueSubtitlesTranslateRequest", async (message) => {
     const { data: { text, langConfig, providerConfig, scheduleAt, hash, videoTitle, summary, url, contextText } } = message
 
@@ -333,7 +351,7 @@ export async function setUpSubtitlesTranslationQueue() {
       const cached = await db.translationCache.get(hash)
       if (cached) {
         const cachedTranslation = normalizeTranslationOutput(providerConfig, cached.translation)
-        await recordTranslationMemory({
+        await recordTranslationMemorySafely({
           sourceText: text,
           translatedText: cachedTranslation,
           sourceLang: langConfig.sourceCode,
@@ -343,7 +361,7 @@ export async function setUpSubtitlesTranslationQueue() {
           url,
           title: videoTitle,
           contextText: contextText ?? summary,
-        }, config)
+        })
         return cachedTranslation
       }
     }
@@ -371,7 +389,7 @@ export async function setUpSubtitlesTranslationQueue() {
         createdAt: new Date(),
       })
 
-      await recordTranslationMemory({
+      await recordTranslationMemorySafely({
         sourceText: text,
         translatedText: result,
         sourceLang: langConfig.sourceCode,
@@ -381,7 +399,7 @@ export async function setUpSubtitlesTranslationQueue() {
         url,
         title: videoTitle,
         contextText: contextText ?? summary,
-      }, config)
+      })
     }
 
     return result

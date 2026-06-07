@@ -341,17 +341,22 @@ export function SelectionTranslationProvider({
       }
 
       if (nextTranslatedText && isLLMProviderConfig(providerConfig)) {
-        await sendMessage("recordTranslationMemory", {
-          sourceText: preparedText,
-          translatedText: nextTranslatedText,
-          sourceLang: translateRequest.language.sourceCode,
-          targetLang: translateRequest.language.targetCode,
-          providerConfig,
-          surface: "selection",
-          url: window.location.href,
-          title: document.title,
-          contextText: paragraphsText,
-        })
+        try {
+          await sendMessage("recordTranslationMemory", {
+            sourceText: preparedText,
+            translatedText: nextTranslatedText,
+            sourceLang: translateRequest.language.sourceCode,
+            targetLang: translateRequest.language.targetCode,
+            providerConfig,
+            surface: "selection",
+            url: window.location.href,
+            title: document.title,
+            contextText: paragraphsText,
+          })
+        }
+        catch {
+          // Translation memory is best-effort and must not hide the translation result.
+        }
       }
 
       void trackFeatureUsed({

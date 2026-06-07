@@ -290,6 +290,7 @@ options:
       test: 测试连接
       testSuccess: 知识库接口可用
       testFailed: 知识库接口测试失败
+      testError: 测试知识库接口失败
     data:
       title: 知识库数据
       description: 查看、导出或清空当前浏览器中长期保存的学习数据库。
@@ -299,12 +300,15 @@ options:
       exportJsonl: 导出 JSONL
       exportJson: 导出 JSON
       exportSuccess: 知识库已导出
+      exportError: 导出知识库失败
       clear: 清空
       clearSuccess: 知识库已清空
+      clearError: 清空知识库失败
       clearDialogTitle: 清空知识库？
       clearDialogDescription: 这会永久删除此浏览器中保存的翻译记忆、学习事件和待同步记录。
       cancel: 取消
       confirmClear: 清空
+      statsError: 加载知识库统计失败
   floatingButtonAndToolbar:
     title: 悬浮按钮和工具栏
     floatingButtonDemoImageAlt: 悬浮按钮演示

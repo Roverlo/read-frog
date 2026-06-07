@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/base-ui/label"
 import { Switch } from "@/components/ui/base-ui/switch"
 import { KNOWLEDGE_BASE_SURFACES } from "@/types/knowledge-base"
 import { configFieldsAtomMap } from "@/utils/atoms/config"
+import { DEFAULT_KNOWLEDGE_BASE_CONFIG } from "@/utils/constants/knowledge-base"
 import { sendMessage } from "@/utils/message"
 import { queryClient } from "@/utils/tanstack-query"
 import { ConfigCard } from "../../components/config-card"
@@ -43,6 +44,7 @@ type KnowledgeBaseI18nKey =
   | "remote.test"
   | "remote.testSuccess"
   | "remote.testFailed"
+  | "remote.testError"
   | "data.title"
   | "data.description"
   | "data.items"
@@ -51,12 +53,15 @@ type KnowledgeBaseI18nKey =
   | "data.exportJsonl"
   | "data.exportJson"
   | "data.exportSuccess"
+  | "data.exportError"
   | "data.clear"
   | "data.clearSuccess"
+  | "data.clearError"
   | "data.clearDialogTitle"
   | "data.clearDialogDescription"
   | "data.cancel"
   | "data.confirmClear"
+  | "data.statsError"
 
 function t(key: KnowledgeBaseI18nKey) {
   return i18n.t(`options.knowledgeBase.${key}` as any)
@@ -71,6 +76,39 @@ const SURFACE_ICON: Record<KnowledgeBaseSurface, string> = {
   translationHub: "tabler:language",
 }
 
+function normalizeKnowledgeBaseConfig(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return DEFAULT_KNOWLEDGE_BASE_CONFIG
+  }
+
+  const candidate = value as Partial<typeof DEFAULT_KNOWLEDGE_BASE_CONFIG>
+  const remoteSync = candidate.remoteSync && typeof candidate.remoteSync === "object" && !Array.isArray(candidate.remoteSync)
+    ? candidate.remoteSync
+    : DEFAULT_KNOWLEDGE_BASE_CONFIG.remoteSync
+
+  return {
+    enabled: typeof candidate.enabled === "boolean"
+      ? candidate.enabled
+      : DEFAULT_KNOWLEDGE_BASE_CONFIG.enabled,
+    captureSurfaces: Array.isArray(candidate.captureSurfaces)
+      ? candidate.captureSurfaces.filter((surface): surface is KnowledgeBaseSurface => (
+          KNOWLEDGE_BASE_SURFACES.includes(surface as KnowledgeBaseSurface)
+        ))
+      : DEFAULT_KNOWLEDGE_BASE_CONFIG.captureSurfaces,
+    remoteSync: {
+      enabled: typeof remoteSync.enabled === "boolean"
+        ? remoteSync.enabled
+        : DEFAULT_KNOWLEDGE_BASE_CONFIG.remoteSync.enabled,
+      endpoint: typeof remoteSync.endpoint === "string"
+        ? remoteSync.endpoint
+        : DEFAULT_KNOWLEDGE_BASE_CONFIG.remoteSync.endpoint,
+      token: typeof remoteSync.token === "string"
+        ? remoteSync.token
+        : DEFAULT_KNOWLEDGE_BASE_CONFIG.remoteSync.token,
+    },
+  }
+}
+
 export function KnowledgeBasePage() {
   return (
     <PageLayout title={t("title")} innerClassName="*:border-b [&>*:last-child]:border-b-0">
@@ -83,7 +121,8 @@ export function KnowledgeBasePage() {
 }
 
 function KnowledgeBaseToggle() {
-  const [knowledgeBase, setKnowledgeBase] = useAtom(configFieldsAtomMap.knowledgeBase)
+  const [knowledgeBaseValue, setKnowledgeBase] = useAtom(configFieldsAtomMap.knowledgeBase)
+  const knowledgeBase = normalizeKnowledgeBaseConfig(knowledgeBaseValue)
 
   return (
     <ConfigCard
@@ -104,7 +143,8 @@ function KnowledgeBaseToggle() {
 }
 
 function CaptureSurfaces() {
-  const [knowledgeBase, setKnowledgeBase] = useAtom(configFieldsAtomMap.knowledgeBase)
+  const [knowledgeBaseValue, setKnowledgeBase] = useAtom(configFieldsAtomMap.knowledgeBase)
+  const knowledgeBase = normalizeKnowledgeBaseConfig(knowledgeBaseValue)
 
   const toggleSurface = (surface: KnowledgeBaseSurface, checked: boolean) => {
     const captureSurfaces = checked
@@ -143,10 +183,12 @@ function CaptureSurfaces() {
 }
 
 function RemoteSyncConfig() {
-  const [knowledgeBase, setKnowledgeBase] = useAtom(configFieldsAtomMap.knowledgeBase)
+  const [knowledgeBaseValue, setKnowledgeBase] = useAtom(configFieldsAtomMap.knowledgeBase)
+  const knowledgeBase = normalizeKnowledgeBaseConfig(knowledgeBaseValue)
   const remoteSync = knowledgeBase.remoteSync
 
   const testMutation = useMutation({
+    meta: { suppressToast: true },
     mutationFn: async () => await sendMessage("testKnowledgeBaseSync", {
       endpoint: remoteSync.endpoint,
       token: remoteSync.token,
@@ -158,6 +200,11 @@ function RemoteSyncConfig() {
       else {
         toast.error(result.message ?? t("remote.testFailed"))
       }
+    },
+    onError: (error) => {
+      toast.error(t("remote.testError"), {
+        description: error instanceof Error ? error.message : undefined,
+      })
     },
   })
 
@@ -230,12 +277,17 @@ function RemoteSyncConfig() {
 }
 
 function KnowledgeBaseData() {
-  const { data: stats, isPending } = useQuery({
+  const { data: stats, isPending, isError } = useQuery({
     queryKey: ["translation-memory-stats"],
     queryFn: async () => await sendMessage("getTranslationMemoryStats"),
+    retry: false,
+    meta: {
+      errorDescription: t("data.statsError"),
+    },
   })
 
   const exportMutation = useMutation({
+    meta: { suppressToast: true },
     mutationFn: async (format: "jsonl" | "json") => {
       const content = await sendMessage("exportTranslationMemory", { format })
       const extension = format === "json" ? "json" : "jsonl"
@@ -245,13 +297,24 @@ function KnowledgeBaseData() {
     onSuccess: () => {
       toast.success(t("data.exportSuccess"))
     },
+    onError: (error) => {
+      toast.error(t("data.exportError"), {
+        description: error instanceof Error ? error.message : undefined,
+      })
+    },
   })
 
   const clearMutation = useMutation({
+    meta: { suppressToast: true },
     mutationFn: () => sendMessage("clearTranslationMemory"),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["translation-memory-stats"] })
       toast.success(t("data.clearSuccess"))
+    },
+    onError: (error) => {
+      toast.error(t("data.clearError"), {
+        description: error instanceof Error ? error.message : undefined,
+      })
     },
   })
 
@@ -263,9 +326,9 @@ function KnowledgeBaseData() {
     >
       <div className="space-y-4">
         <div className="grid gap-2 sm:grid-cols-3">
-          <Metric label={t("data.items")} value={isPending ? "..." : String(stats?.itemCount ?? 0)} />
-          <Metric label={t("data.events")} value={isPending ? "..." : String(stats?.eventCount ?? 0)} />
-          <Metric label={t("data.queue")} value={isPending ? "..." : String(stats?.queuedSyncCount ?? 0)} />
+          <Metric label={t("data.items")} value={isPending && !isError ? "..." : String(stats?.itemCount ?? 0)} />
+          <Metric label={t("data.events")} value={isPending && !isError ? "..." : String(stats?.eventCount ?? 0)} />
+          <Metric label={t("data.queue")} value={isPending && !isError ? "..." : String(stats?.queuedSyncCount ?? 0)} />
         </div>
 
         <div className="flex flex-wrap justify-end gap-2">
